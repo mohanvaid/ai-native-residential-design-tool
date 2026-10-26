@@ -152,6 +152,16 @@ describe("validation", () => {
   });
 });
 
+describe("blocking", () => {
+  it("only blocks on problems the transaction introduces", () => {
+    const overlapping = dryRun(base(), [room("a", 0, 0, 3000, 3000), room("b", 2000, 0, 3000, 3000)]);
+    expect(overlapping.status).toBe("blocked");
+    const rename = dryRun(overlapping.project, [{ op: "RenameRoom", target: "a", args: { name: "Hall" } }]);
+    expect(rename.status).toBe("committed");
+    expect(rename.findings.some((f) => f.code === "room.overlap")).toBe(true);
+  });
+});
+
 describe("ModelStore", () => {
   it("commits, refuses blocked transactions unless accepted, and undoes", () => {
     const store = new ModelStore(base());

@@ -13,3 +13,6 @@ export { tncdbr2019, buildingHeightMm, fsiArea } from "./rules/packs/tncdbr-2019
 export { TNCDBR_2019 } from "./rules/packs/tncdbr-2019.tables.js";
 export * from "./output/floorplan.js";
 export * from "./output/schedule.js";
+export { DesignAgent, anthropicMessages, DEFAULT_MODEL, type MessagesApi, type TurnResult, type AgentOptions } from "./agent/agent.js";
+export { modelSummary, trueFacing } from "./agent/summary.js";
+export { changeSummary, revisionLabel } from "./agent/report.js";

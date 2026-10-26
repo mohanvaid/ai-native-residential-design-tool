@@ -49,9 +49,13 @@ export function dryRun(project: Project, ops: OpInput[]): TransactionResult {
   const next = { ...draft.project, version: project.version + 1 };
   const changes = draft.changes();
   const findings = validate(next);
-  const blocked = findings.some((x) => x.severity === "block");
+  // Only problems this transaction introduces block it; existing ones are reported but do not freeze the model.
+  const before = new Set(validate(project).filter((x) => x.severity === "block").map(findingKey));
+  const blocked = findings.some((x) => x.severity === "block" && !before.has(findingKey(x)));
   return { status: blocked ? "blocked" : "committed", project: next, changes, summary: describeChanges(changes), findings };
 }
+
+const findingKey = (f: Finding) => `${f.code}|${[...f.elements].sort().join(",")}`;
 
 function reject(project: Project, opIndex: number, code: string, message: string): TransactionResult {
   return { status: "rejected", project, changes: [], summary: [], findings: [], error: { opIndex, code, message } };
