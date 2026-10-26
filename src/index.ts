@@ -5,6 +5,8 @@ export * from "./model/walls.js";
 export * from "./model/areas.js";
 export * from "./model/validate.js";
 export * from "./model/structure.js";
+export * from "./model/furnishing.js";
+export * from "./catalogue/catalogue.js";
 export * from "./ops/definitions.js";
 export { applyChangeSet, describeChanges, OpError, type Change, type ChangeSet } from "./ops/changes.js";
 export * from "./engine.js";

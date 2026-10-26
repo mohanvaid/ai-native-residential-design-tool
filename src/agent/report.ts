@@ -3,6 +3,7 @@
  * user's units and what it knocked on, computed from the change set rather
  * than written by the LLM.
  */
+import { catalogueItem } from "../catalogue/catalogue.js";
 import { boundaryToRect, rectDepth, rectWidth } from "../model/geometry.js";
 import type { Finding, Project, Room } from "../model/schema.js";
 import { formatFtIn } from "../model/units.js";
@@ -58,6 +59,16 @@ export function changeSummary(before: Project, after: Project, changes: ChangeSe
     openings.changed && `${openings.changed} adjusted`,
   ].filter(Boolean);
   if (o.length) parts.push(o.join(", "));
+  for (const c of changes) {
+    if (c.kind !== "item") continue;
+    const it = c.after ?? c.before!;
+    const cat = catalogueItem(it.catalogue)?.name.toLowerCase() ?? it.catalogue;
+    const roomName = (p: Project) => p.rooms.find((r) => r.id === it.room)?.name ?? it.room;
+    if (!c.before) parts.push(`added ${cat} in ${roomName(after)}`);
+    else if (!c.after) parts.push(`removed ${cat} from ${roomName(before)}`);
+    else if (c.before.catalogue !== c.after.catalogue) parts.push(`${catalogueItem(c.before.catalogue)?.name.toLowerCase() ?? c.before.catalogue} swapped for ${cat}`);
+    else parts.push(`${cat} moved`);
+  }
   for (const kind of ["tree", "column", "stair"] as const) {
     const cs = changes.filter((c) => c.kind === kind);
     const n = { added: cs.filter((c) => !c.before).length, removed: cs.filter((c) => !c.after).length, changed: cs.filter((c) => c.before && c.after).length };

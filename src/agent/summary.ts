@@ -10,6 +10,7 @@ import { formatFtIn } from "../model/units.js";
 import { clearRect, deriveWalls, resolveOpening, wallsOnSide, type Wall } from "../model/walls.js";
 import { marksById } from "../output/schedule.js";
 import { rulePacksFor } from "../rules/registry.js";
+import { catalogueItem } from "../catalogue/catalogue.js";
 import { gridRef, stairLayout, structuralGrid } from "../model/structure.js";
 import { validate } from "../engine.js";
 import { revisionLabel } from "./report.js";
@@ -73,6 +74,14 @@ export function modelSummary(project: Project): string {
     }
   }
 
+  if (project.items.length) {
+    lines.push("", "Furniture and fixtures (centre in mm; facing = direction the front faces):");
+    for (const it of project.items) {
+      const cat = catalogueItem(it.catalogue);
+      const room = project.rooms.find((r) => r.id === it.room)?.name ?? it.room;
+      lines.push(`- ${it.id} ${cat?.name ?? it.catalogue} [${it.catalogue}] in ${room}, centre (${it.at[0]}, ${it.at[1]}), facing ${it.facing}${it.mirror ? ", mirrored" : ""}`);
+    }
+  }
   if (project.trees.length) {
     lines.push("", "Trees (trunk centre in mm; radii in mm):");
     for (const t of project.trees)

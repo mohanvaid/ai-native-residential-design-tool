@@ -12,7 +12,9 @@ import {
   translateRect,
   type Rect,
 } from "../model/geometry.js";
-import { Column, Level, Opening, Room, Stair, Tree, type OpeningType, type Side } from "../model/schema.js";
+import { catalogueItem, type CatalogueItem } from "../catalogue/catalogue.js";
+import { placeItem } from "../model/furnishing.js";
+import { Column, Level, Opening, PlacedItem, Room, Stair, Tree, type OpeningType, type Side } from "../model/schema.js";
 import { DEFAULT_MAX_RISER_MM, levelIndex, proposeColumns, stairWellRect, stairWellSize, TREE_DEFAULTS, TREE_FALLBACK } from "../model/structure.js";
 import { deriveWalls, roomRect } from "../model/walls.js";
 import { zoneOf } from "../model/zones.js";
@@ -121,6 +123,7 @@ export function applyOp(draft: Draft, op: Op, opIndex: number): void {
     case "RemoveRoom": {
       draft.requireRoom(op.target);
       for (const o of draft.project.openings.filter((o) => o.host.room === op.target)) draft.removeOpening(o.id);
+      for (const it of draft.project.items.filter((it) => it.room === op.target)) draft.remove("item", it.id);
       draft.removeRoom(op.target);
       return;
     }
@@ -159,6 +162,7 @@ export function applyOp(draft: Draft, op: Op, opIndex: number): void {
     case "MoveRoom": {
       const room = draft.requireRoom(op.target);
       draft.putRoom({ ...room, boundary: rectToBoundary(translateRect(roomRect(room), op.args.dx, op.args.dy)) });
+      for (const it of draft.project.items.filter((it) => it.room === room.id)) draft.put("item", { ...it, at: [it.at[0] + op.args.dx, it.at[1] + op.args.dy] });
       return;
     }
 
@@ -177,7 +181,9 @@ export function applyOp(draft: Draft, op: Op, opIndex: number): void {
       const room = draft.requireRoom(a.room);
       const id = a.id ?? draft.nextId("op");
       if (draft.opening(id)) throw new OpError(`Opening id "${id}" already exists.`, "opening.duplicate");
-      const d = OPENING_DEFAULTS[a.type];
+      const cat = a.catalogue ? catalogueItem(a.catalogue) : undefined;
+      if (a.catalogue && !cat) throw new OpError(`"${a.catalogue}" is not in the catalogue.`, "catalogue.missing");
+      const d = cat ? { ...OPENING_DEFAULTS[a.type], width: cat.width, height: cat.height } : OPENING_DEFAULTS[a.type];
       const width = a.width ?? d.width;
       const length = sideLength(roomRect(room), a.side);
       const offset = a.offset ?? Math.max(0, Math.round((length - width) / 2));
@@ -190,7 +196,7 @@ export function applyOp(draft: Draft, op: Op, opIndex: number): void {
           width,
           height: a.height ?? d.height,
           sill: a.sill ?? d.sill,
-          catalogue: a.catalogue,
+          catalogue: cat?.id,
           swing: a.swing ?? (a.type === "door" ? { hinge: "start", into: "host" } : undefined),
           meta,
         }),
@@ -339,12 +345,67 @@ export function applyOp(draft: Draft, op: Op, opIndex: number): void {
       return;
     }
 
+    case "PlaceItem": {
+      const a = op.args;
+      const room = draft.requireRoom(a.room);
+      const cat = requireCatalogue(a.catalogue);
+      const id = a.id ?? draft.nextId("it");
+      if (draft.get("item", id)) throw new OpError(`Item id "${id}" already exists.`, "item.duplicate");
+      const spot = placeItem(draft.project, room, cat, a);
+      if ("error" in spot) throw new OpError(spot.error, "item.no_fit");
+      draft.put("item", PlacedItem.parse({ id, catalogue: cat.id, room: room.id, at: spot.at, facing: spot.facing, mirror: a.mirror ?? false, meta }));
+      return;
+    }
+
+    case "MoveItem": {
+      const it = draft.require("item", op.target);
+      const a = op.args;
+      const room = draft.requireRoom(a.room ?? it.room);
+      const cat = requireCatalogue(it.catalogue);
+      if (a.dx !== undefined || a.dy !== undefined) {
+        draft.put("item", { ...it, room: room.id, at: [it.at[0] + (a.dx ?? 0), it.at[1] + (a.dy ?? 0)], facing: a.facing ?? it.facing });
+        return;
+      }
+      if (!a.against && a.x === undefined && a.facing && a.room === undefined) {
+        draft.put("item", { ...it, facing: a.facing });
+        return;
+      }
+      const spot = placeItem(draft.project, room, cat, a.x !== undefined ? { ...a, facing: a.facing ?? it.facing } : a, it.id);
+      if ("error" in spot) throw new OpError(spot.error, "item.no_fit");
+      draft.put("item", { ...it, room: room.id, at: spot.at, facing: spot.facing });
+      return;
+    }
+
+    case "SwapItem": {
+      const it = draft.require("item", op.target);
+      const cat = requireCatalogue(op.args.catalogue);
+      const old = requireCatalogue(it.catalogue);
+      // Keep the back against the same place: shift the centre by half the depth change.
+      const dd = (cat.depth - old.depth) / 2;
+      const [fx, fy] = OUTWARD[it.facing];
+      draft.put("item", { ...it, catalogue: cat.id, at: [Math.round(it.at[0] + fx * dd), Math.round(it.at[1] + fy * dd)] });
+      return;
+    }
+
+    case "RemoveItem": {
+      draft.require("item", op.target);
+      draft.remove("item", op.target);
+      return;
+    }
+
     case "RemoveStair": {
       draft.require("stair", op.target);
       draft.remove("stair", op.target);
       return;
     }
   }
+}
+
+function requireCatalogue(id: string): CatalogueItem {
+  const cat = catalogueItem(id);
+  if (!cat) throw new OpError(`"${id}" is not in the catalogue.`, "catalogue.missing");
+  if (cat.category === "door" || cat.category === "window") throw new OpError(`"${id}" is a ${cat.category}; add it with AddOpening.`, "catalogue.not_placeable");
+  return cat;
 }
 
 /** 9" × 12", the usual column for a G+2 house frame. */

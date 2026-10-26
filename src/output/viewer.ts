@@ -5,6 +5,7 @@
  * zoom. Nothing is fetched at view time.
  */
 import { revisionLabel } from "../agent/report.js";
+import { catalogueItem } from "../catalogue/catalogue.js";
 import { validate } from "../engine.js";
 import { rectArea, rectDepth, rectWidth } from "../model/geometry.js";
 import type { Finding, Project } from "../model/schema.js";
@@ -43,6 +44,18 @@ function roomRows(project: Project): string {
 function openingRows(project: Project): string {
   return openingSchedule(project)
     .map((r) => `<tr><td>${r.mark}</td><td>${r.type}</td><td>${formatFtIn(r.width)} × ${formatFtIn(r.height)}</td><td class="n">${r.count}</td></tr>`)
+    .join("");
+}
+
+function itemRows(project: Project): string {
+  return project.items
+    .map((it) => {
+      const cat = catalogueItem(it.catalogue);
+      const room = project.rooms.find((r) => r.id === it.room)?.name ?? it.room;
+      if (!cat) return "";
+      const price = cat.priceInr[1] ? `₹${(cat.priceInr[0] / 1000).toFixed(0)}k–${(cat.priceInr[1] / 1000).toFixed(0)}k` : "";
+      return `<tr><td>${escXml(room)}</td><td>${escXml(cat.name)}</td><td>${formatFtIn(cat.width)} × ${formatFtIn(cat.depth)}</td><td class="n">${price}</td></tr>`;
+    })
     .join("");
 }
 
@@ -140,6 +153,8 @@ ${plans.map((p, i) => `<div class="plan${i === start ? " active" : ""}" data-lev
     <table><thead><tr><th>Floor</th><th>Room</th><th>Size</th><th class="n">sq ft</th></tr></thead><tbody>${roomRows(project)}</tbody></table>
     <h2>Doors and windows</h2>
     <table><thead><tr><th>Mark</th><th>Type</th><th>W × H</th><th class="n">No.</th></tr></thead><tbody>${openingRows(project)}</tbody></table>
+    ${project.items.length ? `<h2>Furniture and fixtures</h2>
+    <table><thead><tr><th>Room</th><th>Item</th><th>Size</th><th class="n">Price band</th></tr></thead><tbody>${itemRows(project)}</tbody></table>` : ""}
     ${pdf ? `<a class="download" id="pdf" href="#" download="${fileBase}.pdf">Download plans as PDF</a>` : ""}
     <p class="note">Room sizes are clear internal dimensions. Areas are carpet. Not for construction until checked and signed off by a registered professional.</p>
   </div>

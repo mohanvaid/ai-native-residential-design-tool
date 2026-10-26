@@ -266,6 +266,43 @@ export const UpdateStair = z.object({
 
 export const RemoveStair = z.object({ op: z.literal("RemoveStair"), target: z.string(), reason });
 
+const placement = {
+  against: Side.optional().describe("Wall of the room to put the item's back against (a bed's headboard, a sofa's back)."),
+  offset: mm.nonnegative().optional().describe("Along that wall, from its west or south end to the item's near edge."),
+  align: z.enum(["start", "centre", "end"]).optional().describe("Along that wall, when no offset is given; default centre."),
+  facing: Side.optional().describe("Direction the item's front faces (a bed's foot, a car's nose)."),
+  x: mm.optional().describe("Explicit centre; give with y."),
+  y: mm.optional(),
+};
+
+export const PlaceItem = z.object({
+  op: z.literal("PlaceItem"),
+  args: z.object({
+    id: z.string().optional(),
+    catalogue: z.string().describe("Catalogue id, e.g. bed.queen or sofa.3seat-chaise."),
+    room: z.string(),
+    mirror: z.boolean().optional().describe("For handed items: flip, e.g. chaise on the other side."),
+    ...placement,
+  }),
+  reason,
+});
+
+export const MoveItem = z.object({
+  op: z.literal("MoveItem"),
+  target: z.string(),
+  args: z.object({ dx: mm.optional(), dy: mm.optional(), room: z.string().optional().describe("Move it to another room."), ...placement }),
+  reason,
+});
+
+export const SwapItem = z.object({
+  op: z.literal("SwapItem"),
+  target: z.string(),
+  args: z.object({ catalogue: z.string().describe("The new catalogue id; it keeps the same wall and centre where it fits.") }),
+  reason,
+});
+
+export const RemoveItem = z.object({ op: z.literal("RemoveItem"), target: z.string(), reason });
+
 export const Op = z.discriminatedUnion("op", [
   SetPlot,
   SetRoad,
@@ -292,6 +329,10 @@ export const Op = z.discriminatedUnion("op", [
   AddStair,
   UpdateStair,
   RemoveStair,
+  PlaceItem,
+  MoveItem,
+  SwapItem,
+  RemoveItem,
 ]);
 export type Op = z.infer<typeof Op>;
 /** An op as the compiler emits it, before defaults are filled in. */
@@ -334,4 +375,8 @@ const DESCRIPTIONS: Record<OpName, string> = {
   AddStair: "Add a stair from one level to the next, sized to fit unless a well size is given.",
   UpdateStair: "Move, resize, turn or reshape a stair.",
   RemoveStair: "Remove a stair.",
+  PlaceItem: "Place furniture, sanitaryware, an appliance or a vehicle from the catalogue in a room. With no position it finds a spot clear of doors and other items.",
+  MoveItem: "Move or turn a placed item: by dx/dy, to a wall, to a new centre, or into another room.",
+  SwapItem: "Replace a placed item with another catalogue entry (e.g. queen bed to king) in the same place.",
+  RemoveItem: "Remove a placed item.",
 };

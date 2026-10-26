@@ -47,6 +47,16 @@ step("Add a first floor with a bedroom, toilet and lounge, and a stair up from t
   { op: "AddOpening", args: { type: "ventilator", room: "rm_tlt2", side: "west" } },
 ]);
 
+step("Furnish it", [
+  { op: "PlaceItem", args: { id: "it_bed", catalogue: "bed.queen", room: "rm_bed1", against: "west" } },
+  { op: "PlaceItem", args: { id: "it_ward", catalogue: "wardrobe.3door", room: "rm_bed1", against: "south", align: "end" } },
+  { op: "PlaceItem", args: { id: "it_sofa", catalogue: "sofa.3seat", room: "rm_liv" } },
+  { op: "PlaceItem", args: { id: "it_din", catalogue: "dining.4", room: "rm_din" } },
+  { op: "PlaceItem", args: { id: "it_wc", catalogue: "wc.ewc", room: "rm_tlt1", against: "north" } },
+  { op: "PlaceItem", args: { id: "it_fridge", catalogue: "fridge.double", room: "rm_kit", against: "north", align: "end" } },
+  { op: "PlaceItem", args: { id: "it_bed2", catalogue: "bed.double", room: "rm_bed2", against: "west" } },
+]);
+
 step("Frame it: columns at every wall corner and junction", [{ op: "PlaceColumns", args: {} }]);
 
 const undone = store.undo();

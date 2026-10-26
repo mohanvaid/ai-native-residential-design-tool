@@ -205,6 +205,24 @@ export const Stair = z.object({
 });
 export type Stair = z.infer<typeof Stair>;
 
+/**
+ * A catalogue item placed in a room: furniture, sanitaryware, an appliance
+ * or a vehicle. Its footprint is the catalogue's width (along the front) by
+ * depth, centred on `at`, with the front facing `facing`.
+ */
+export const PlacedItem = z.object({
+  id: z.string(),
+  /** Versioned catalogue id, e.g. "bed.queen@1". */
+  catalogue: z.string(),
+  room: z.string(),
+  at: Point,
+  facing: Side,
+  /** Flip a handed item (e.g. chaise on the other side). */
+  mirror: z.boolean().default(false),
+  meta: Meta,
+});
+export type PlacedItem = z.infer<typeof PlacedItem>;
+
 export const Jurisdiction = z.enum(["IN-TN-CMDA", "IN-TN-DTCP", "NONE"]);
 export type Jurisdiction = z.infer<typeof Jurisdiction>;
 
@@ -236,6 +254,7 @@ export const Project = z.object({
   trees: z.array(Tree).default([]),
   columns: z.array(Column).default([]),
   stairs: z.array(Stair).default([]),
+  items: z.array(PlacedItem).default([]),
 });
 export type Project = z.infer<typeof Project>;
 

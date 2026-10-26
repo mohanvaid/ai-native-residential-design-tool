@@ -3,7 +3,8 @@
  * element it touches, so a transaction yields a ChangeSet: the diff for
  * "what did the AI change?" and, reversed, the undo.
  */
-import type { Column, Level, Opening, Plot, Project, Room, Stair, Tree } from "../model/schema.js";
+import { catalogueItem } from "../catalogue/catalogue.js";
+import type { Column, Level, Opening, PlacedItem, Plot, Project, Room, Stair, Tree } from "../model/schema.js";
 
 /** Element collections on the project, by change kind. */
 interface Elements {
@@ -12,9 +13,10 @@ interface Elements {
   tree: Tree;
   column: Column;
   stair: Stair;
+  item: PlacedItem;
 }
 export type ElementKind = keyof Elements;
-const COLLECTION = { room: "rooms", opening: "openings", tree: "trees", column: "columns", stair: "stairs" } as const satisfies Record<ElementKind, keyof Project>;
+const COLLECTION = { room: "rooms", opening: "openings", tree: "trees", column: "columns", stair: "stairs", item: "items" } as const satisfies Record<ElementKind, keyof Project>;
 const ELEMENT_KINDS = Object.keys(COLLECTION) as ElementKind[];
 
 type ElementChange = { [K in ElementKind]: { kind: K; id: string; before: Elements[K] | null; after: Elements[K] | null } }[ElementKind];
@@ -45,6 +47,7 @@ export class Draft {
     tree: new Map(),
     column: new Map(),
     stair: new Map(),
+    item: new Map(),
   };
   private levelsBefore: Level[] | null = null;
   private plotBefore: Plot | null = null;
@@ -191,8 +194,13 @@ export function describeChanges(changes: ChangeSet): string[] {
   const columns = changes.filter((c) => c.kind === "column");
   const bulk = columns.length > 3;
   const lines = changes.filter((c) => !(bulk && c.kind === "column")).map((c) => {
-    const name = (v: unknown) =>
-      v && typeof v === "object" && "name" in v ? String(v.name) : v && typeof v === "object" && "species" in v ? String(v.species) : c.id;
+    const name = (v: unknown) => {
+      if (!v || typeof v !== "object") return c.id;
+      if ("name" in v) return String(v.name);
+      if ("species" in v) return String(v.species);
+      if ("catalogue" in v) return `${catalogueItem(String(v.catalogue))?.name.toLowerCase() ?? v.catalogue} (${c.id})`;
+      return c.id;
+    };
     if (c.kind === "levels") return "Levels updated";
     if (c.kind === "plot") return "Plot updated";
     if (!c.before) return `Added ${c.kind} ${name(c.after)}`;

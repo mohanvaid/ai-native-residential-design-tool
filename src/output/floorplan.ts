@@ -8,6 +8,9 @@ import { boundaryToRect, OUTWARD, rectArea, rectDepth, rectWidth, type Rect } fr
 import type { Project, RoomType } from "../model/schema.js";
 import { formatFtIn, sqmToSqft } from "../model/units.js";
 import { clearRect, deriveWalls, resolveOpening, type ResolvedOpening, type Wall } from "../model/walls.js";
+import { catalogueItem } from "../catalogue/catalogue.js";
+import { itemRect } from "../model/furnishing.js";
+import { drawPlacedItem } from "./symbols.js";
 import { drawStair, drawStructure, drawTree, sheetFrame, SMALL, TEXT } from "./frame.js";
 import { sheetsToPdf, type Paper } from "./pdf.js";
 import { marksById } from "./schedule.js";
@@ -54,6 +57,12 @@ export function floorPlanSheet(project: Project, levelId: string, opts: FloorPla
 
   // Room fills
   for (const room of rooms) items.push({ kind: "rect", ...box(clearRect(walls, room)), fill: ROOM_FILL[room.type] ?? "#f4f4f4" });
+
+  // Furniture, fixtures and vehicles
+  for (const it of project.items) {
+    const cat = catalogueItem(it.catalogue);
+    if (cat && rooms.some((r) => r.id === it.room)) drawPlacedItem(fr, it, cat);
+  }
 
   // Walls, with gaps at openings
   for (const w of walls) {
@@ -112,10 +121,16 @@ export function floorPlanSheet(project: Project, levelId: string, opts: FloorPla
   drawStructure(fr, project, levelId);
 
   // Room tags
-  const wells = project.stairs.filter((st) => st.fromLevel === levelId || st.toLevel === levelId).map((st) => boundaryToRect(st.boundary)).filter((r): r is Rect => r !== null);
+  const obstacles = [
+    ...project.stairs.filter((st) => st.fromLevel === levelId || st.toLevel === levelId).map((st) => boundaryToRect(st.boundary)),
+    ...project.items.filter((it) => rooms.some((r) => r.id === it.room)).map((it) => {
+      const cat = catalogueItem(it.catalogue);
+      return cat ? itemRect(it, cat) : null;
+    }),
+  ].filter((r): r is Rect => r !== null);
   for (const room of rooms) {
     const c = clearRect(walls, room);
-    const t = tagSpot(c, wells);
+    const t = tagSpot(c, obstacles);
     const [cx, cy] = P((t.x0 + t.x1) / 2, (t.y0 + t.y1) / 2);
     const sqm = rectArea(c) / 1e6;
     text([cx, cy - TEXT * 1.1], room.name.toUpperCase(), TEXT, { bold: true });
@@ -144,17 +159,23 @@ export function renderFloorPlanSvg(project: Project, levelId: string, opts: Floo
   return sheetToSvg(floorPlanSheet(project, levelId, opts));
 }
 
-/** Where to put a room's tag: the room, or the largest strip of it left beside a stair well. */
-function tagSpot(room: Rect, wells: Rect[]): Rect {
-  const well = wells.find((w) => w.x0 < room.x1 && w.x1 > room.x0 && w.y0 < room.y1 && w.y1 > room.y0);
-  if (!well) return room;
-  const strips: Rect[] = [
-    { ...room, x1: Math.max(room.x0, well.x0) },
-    { ...room, x0: Math.min(room.x1, well.x1) },
-    { ...room, y1: Math.max(room.y0, well.y0) },
-    { ...room, y0: Math.min(room.y1, well.y1) },
-  ];
-  return strips.sort((a, b) => rectArea(b) - rectArea(a))[0]!;
+/** Where to put a room's tag: the largest part of the room left clear of stair wells and furniture. */
+function tagSpot(room: Rect, obstacles: Rect[]): Rect {
+  let spot = room;
+  for (const ob of obstacles) {
+    if (!(ob.x0 < spot.x1 && ob.x1 > spot.x0 && ob.y0 < spot.y1 && ob.y1 > spot.y0)) continue;
+    const strips: Rect[] = [
+      { ...spot, x1: Math.max(spot.x0, ob.x0) },
+      { ...spot, x0: Math.min(spot.x1, ob.x1) },
+      { ...spot, y1: Math.max(spot.y0, ob.y0) },
+      { ...spot, y0: Math.min(spot.y1, ob.y1) },
+    ];
+    const best = strips.sort((a, b) => rectArea(b) - rectArea(a))[0]!;
+    // Keep the tag on the room when the leftover strip is too thin to read
+    if (Math.min(rectWidth(best), rectDepth(best)) < 700) continue;
+    spot = best;
+  }
+  return spot;
 }
 
 function wallRect(w: Wall, a: number, b: number): Rect {
