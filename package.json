@@ -1,0 +1,27 @@
+{
+  "name": "@ai-native-rdt/engine",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Parametric building model engine for the AI-native residential design tool (Chennai / Tamil Nadu, houses up to G+2).",
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "demo": "tsx examples/demo-house.ts"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mohanvaid/ai-native-residential-design-tool.git"
+  },
+  "license": "UNLICENSED",
+  "dependencies": {
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.5",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.5"
+  }
+}
