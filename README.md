@@ -2,7 +2,7 @@
 
 A conversational design tool for independent houses (up to G+2) in Chennai and Tamil Nadu. Every chat request becomes a small list of typed edit operations on one parametric building model, and every drawing, schedule and check is regenerated from that model.
 
-This repository holds the engine (the model, edit operations, validation, the Tamil Nadu rule pack and floor-plan output) and the chat agent that drives it. There is no web UI yet.
+This repository holds the engine (the model, edit operations, validation, the Tamil Nadu rule pack and floor-plan output) the chat agent that drives it, and a shareable offline plan viewer. There is no editing web UI yet.
 
 ## Quick start
 
@@ -13,7 +13,13 @@ npm run demo      # builds a 30×40 ft east-facing house and writes plans to ./o
 ANTHROPIC_API_KEY=... npm run chat   # chat with that house in the terminal
 ```
 
-`npm run demo` prints each edit as a transaction (committed, blocked or rejected) with its findings, then writes `out/plan-lv_gf.svg`, `out/plan-lv_ff.svg` and `out/model.json`.
+`npm run demo` prints each edit as a transaction (committed, blocked or rejected) with its findings, then writes:
+
+- `out/viewer.html`: one self-contained file for sharing (for example over WhatsApp). It opens offline on a phone, with a tab per floor, drag and pinch to pan and zoom, +/−/Fit buttons, the room and door/window schedules, the open checks, and a button to download the PDF.
+- `out/plans.pdf`: one page per floor, at 1:100 on A4 or A3.
+- `out/plan-<level>.svg` and `out/model.json`.
+
+`npm run chat` rewrites the same files after every change.
 
 ## How it fits together
 
@@ -27,7 +33,9 @@ ANTHROPIC_API_KEY=... npm run chat   # chat with that house in the terminal
 | `src/model/validate.ts` | Core invariants: overlaps, plot bounds, openings fitting their walls, windows and doors per room. |
 | `src/rules/` | Rule packs. `packs/tncdbr-2019.tables.ts` holds the TNCDBR 2019 numbers as data, `packs/tncdbr-2019.ts` the checks. |
 | `src/agent/` | The chat agent: Claude turns each message into typed ops through tools (`apply_edits`, `query_model`, `undo_last_request`); the engine checks them; each message becomes one revision, and the reply ends with a computed change summary (`Rev C: Living now 13'3" × 15'3" (was …) · all checks pass`). |
-| `src/output/floorplan.ts` | Floor plan SVG at 1:100: hatched walls, door swings, window symbols, D/W/V marks, room tags in ft-in and sq ft, dimension chains, setback lines, north arrow. |
+| `src/output/floorplan.ts` | Floor plan sheet at 1:100: hatched walls, door swings, window symbols, D/W/V marks, room tags in ft-in and sq ft, dimension chains, setback lines, north arrow, scale bar, revision label and an advisory stamp. |
+| `src/output/sheet.ts`, `src/output/pdf.ts` | A sheet is a display list, so one drawing renders to SVG and to a dependency-free vector PDF. |
+| `src/output/viewer.ts` | The shareable single-file HTML viewer. |
 
 ### Edit operations
 

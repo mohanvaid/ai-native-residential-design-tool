@@ -6,7 +6,7 @@
  *   npm run demo
  */
 import { mkdirSync, writeFileSync } from "node:fs";
-import { ftIn, ModelStore, openingSchedule, renderFloorPlanSvg, type OpInput, type TransactionResult } from "../src/index.js";
+import { ftIn, ModelStore, openingSchedule, renderFloorPlanPdf, renderFloorPlanSvg, renderViewerHtml, type OpInput, type TransactionResult } from "../src/index.js";
 import { DEMO_GROUND_FLOOR, DEMO_ROAD, demoPlot } from "../src/templates/demo-house.js";
 
 const store = new ModelStore(demoPlot());
@@ -48,8 +48,10 @@ const p = store.current;
 mkdirSync("out", { recursive: true });
 for (const level of p.levels) writeFileSync(`out/plan-${level.id}.svg`, renderFloorPlanSvg(p, level.id));
 writeFileSync("out/model.json", JSON.stringify(p, null, 2));
+writeFileSync("out/plans.pdf", renderFloorPlanPdf(p));
+writeFileSync("out/viewer.html", renderViewerHtml(p));
 console.log(`\nVersion ${p.version}. Door and window schedule:`);
 for (const row of openingSchedule(p)) console.log(`  ${row.mark.padEnd(4)}${row.type.padEnd(11)}${row.width} × ${row.height}, sill ${row.sill}  × ${row.count}`);
 console.log("\nRule findings:");
 for (const f of store.commit([]).findings.filter((f) => f.source !== "core")) console.log(`  [${f.severity}] ${f.message}`);
-console.log("\nWrote out/plan-lv_gf.svg, out/plan-lv_ff.svg, out/model.json");
+console.log("\nWrote out/viewer.html (open on a phone), out/plans.pdf, out/plan-lv_gf.svg, out/plan-lv_ff.svg, out/model.json");
