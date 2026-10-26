@@ -9,7 +9,7 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { createInterface } from "node:readline/promises";
 import { DesignAgent } from "../src/agent/agent.js";
-import { ModelStore, renderDrawingSetPdf, renderFloorPlanSvg, renderViewer3dHtml, renderViewerHtml } from "../src/index.js";
+import { boqTable, ModelStore, renderDrawingSetPdf, renderFloorPlanSvg, renderViewer3dHtml, renderViewerHtml, tableToCsv } from "../src/index.js";
 import { DEMO_GROUND_FLOOR, DEMO_ROAD, demoPlot } from "../src/templates/demo-house.js";
 
 if (!process.env.ANTHROPIC_API_KEY && !process.env.ANTHROPIC_AUTH_TOKEN) {
@@ -28,6 +28,7 @@ function writePlans(): void {
   writeFileSync("out/plans.pdf", renderDrawingSetPdf(store.current));
   writeFileSync("out/viewer.html", renderViewerHtml(store.current));
   writeFileSync("out/3d.html", renderViewer3dHtml(store.current));
+  writeFileSync("out/cost-estimate.csv", tableToCsv(boqTable(store.current)));
 }
 
 writePlans();

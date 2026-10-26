@@ -15,11 +15,11 @@ ANTHROPIC_API_KEY=... npm run chat   # chat with that house in the terminal
 
 `npm run demo` prints each edit as a transaction (committed, blocked or rejected) with its findings, then writes:
 
-- `out/viewer.html`: one self-contained file for sharing (for example over WhatsApp). It opens offline on a phone, with tabs for the site plan and each floor, drag and pinch to pan and zoom, +/−/Fit buttons, the room, door/window and furniture schedules, the open checks, and a button to download the PDF.
+- `out/viewer.html`: one self-contained file for sharing (for example over WhatsApp). It opens offline on a phone, with tabs for the site plan and each floor, drag and pinch to pan and zoom, +/−/Fit buttons, the room, door/window and furniture schedules, the cost estimate by trade, the open checks, and a button to download the PDF.
 - `out/3d.html`: an offline 3D view (three.js inlined, about 0.7 MB) with buttons to zoom, turn, jump to each side or the top, and cut away upper floors.
-- `out/plans.pdf`: the whole drawing set: site plan, floor plans, four elevations and a section at 1:100 on A4 or A3, then the schedules.
+- `out/plans.pdf`: the whole drawing set: site plan, floor plans, four elevations and a section at 1:100 on A4 or A3, then the schedules and the bill of quantities.
 - `out/model.glb`: the 3D model as binary glTF for Blender, SketchUp or any web viewer.
-- `out/*.csv`: door and window, flooring and furniture schedules for Excel or Google Sheets.
+- `out/*.csv`: door and window, flooring and furniture schedules and the cost estimate, for Excel or Google Sheets.
 - `out/plan-<level>.svg` and `out/model.json`.
 
 `npm run chat` rewrites the same files after every change.
@@ -45,6 +45,7 @@ ANTHROPIC_API_KEY=... npm run chat   # chat with that house in the terminal
 | `src/output/siteplan.ts` | Site plan at 1:100: trees with canopy and root zones, ground footprint, upper-floor outlines, stairs, column grid and an area statement. |
 | `src/output/elevation.ts` | Four elevations named by the true direction each side faces, in the project's colour theme, and a section cut through the stair. |
 | `src/output/schedules.ts` | Door and window schedule (count per floor), flooring schedule (tile, wastage, tile count, skirting) and furniture schedule, as tables, CSV and printable sheets. |
+| `src/cost/` | Cost estimate. `rates.ts` is the Chennai rate table (material and labour per unit, with the labour share); `boq.ts` takes quantities off the model (excavation, footings, columns, beams, lintels, slabs, stairs, steel by kg/m³, brickwork net of openings, plaster, paint, waterproofing, floor and wall tiles, skirting, doors, windows, railings, electrical points, plumbing sets), prices them with a 10% margin and 3% contingency, and reports cost per sq ft. Each line lists the element ids it was measured from. `costDelta` gives the change per edit, which ends every change summary (`cost +₹1.2 lakh to ₹29.6 lakh`), and `SetRate` overrides a rate for the project. Furniture is totalled separately. |
 | `src/output/model3d.ts`, `src/output/viewer3d.ts` | 3D massing (walls cut around openings, glazing, sunshades, slabs, parapets, stair steps, furniture blocks, trees), a glTF writer and the offline 3D viewer. |
 | `src/output/drawingset.ts` | The drawing set in sheet order, for the PDF and the viewer tabs. |
 | `src/output/sheet.ts`, `src/output/pdf.ts` | A sheet is a display list, so one drawing renders to SVG and to a dependency-free vector PDF. |
@@ -52,7 +53,7 @@ ANTHROPIC_API_KEY=... npm run chat   # chat with that house in the terminal
 
 ### Edit operations
 
-`SetPlot`, `SetRoad`, `AddLevel`, `RemoveLevel`, `SetLevelHeight`, `AddRoom`, `RemoveRoom`, `ResizeRoom` (by distance or to a target area), `MoveRoom`, `RenameRoom`, `SetRoomType`, `AddOpening`, `MoveOpening`, `ResizeOpening`, `RemoveOpening`, `AddTree`, `UpdateTree`, `RemoveTree`, `AddColumn`, `MoveColumn`, `RemoveColumn`, `PlaceColumns` (a column at every wall corner and junction, splitting runs longer than the span limit), `AddStair` (sized to fit when no well size is given), `UpdateStair`, `RemoveStair`, `PlaceItem` (finds a spot when no wall is given), `MoveItem`, `SwapItem`, `RemoveItem`, `SetPreferences` (Vastu, span limit, budget, family size, colour theme), `SetFinish` (floor tiles per room).
+`SetPlot`, `SetRoad`, `AddLevel`, `RemoveLevel`, `SetLevelHeight`, `AddRoom`, `RemoveRoom`, `ResizeRoom` (by distance or to a target area), `MoveRoom`, `RenameRoom`, `SetRoomType`, `AddOpening`, `MoveOpening`, `ResizeOpening`, `RemoveOpening`, `AddTree`, `UpdateTree`, `RemoveTree`, `AddColumn`, `MoveColumn`, `RemoveColumn`, `PlaceColumns` (a column at every wall corner and junction, splitting runs longer than the span limit), `AddStair` (sized to fit when no well size is given), `UpdateStair`, `RemoveStair`, `PlaceItem` (finds a spot when no wall is given), `MoveItem`, `SwapItem`, `RemoveItem`, `SetPreferences` (Vastu, span limit, budget, family size, colour theme; a budget turns on an over-budget warning), `SetFinish` (floor tiles per room), `SetRate` (a project's own rate for a BOQ line, e.g. a contractor's quote).
 
 Every op shares one shape, `{ op, target?, args, reason? }`. A request is one transaction: all ops apply or none do. Each transaction returns a change set (what changed, used for "what did the AI change?") and undo replays it backwards.
 
@@ -74,4 +75,4 @@ Values were transcribed from the extracted Gazette text, and each cell cites its
 - Columns are checked for alignment, spans and support only; member sizes, beams and foundations are for the structural engineer.
 - Stair headroom is not checked yet, and lifts and shafts are not modelled.
 - Elevations show external walls and openings; balconies, railings, staircase towers and roof details are not modelled yet.
-- MEP and costing are later slices.
+- MEP layouts are a later slice. The cost estimate is a planning figure (about ±15%) from assumed sections and allowances, not a tender BOQ; footing sizes, steel and electrical points are rules of thumb until the engineer's drawings exist.

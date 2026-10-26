@@ -210,7 +210,8 @@ export function describeChanges(changes: ChangeSet): string[] {
   const lines = changes.filter((c) => !(bulk && c.kind === "column")).map((c) => {
     const name = (v: unknown) => {
       if (!v || typeof v !== "object") return c.id;
-      if ("name" in v) return String(v.name);
+      if ("name" in v && v.name) return String(v.name);
+      if ("host" in v && "type" in v) return `${v.type} (${c.id})`;
       if ("species" in v) return String(v.species);
       if ("catalogue" in v) return `${catalogueItem(String(v.catalogue))?.name.toLowerCase() ?? v.catalogue} (${c.id})`;
       return c.id;

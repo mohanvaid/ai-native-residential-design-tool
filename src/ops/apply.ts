@@ -13,6 +13,7 @@ import {
   type Rect,
 } from "../model/geometry.js";
 import { catalogueItem, type CatalogueItem } from "../catalogue/catalogue.js";
+import { rateFor } from "../cost/rates.js";
 import { placeItem } from "../model/furnishing.js";
 import { Column, Level, Opening, PlacedItem, Room, Stair, Tree, type OpeningType, type Side } from "../model/schema.js";
 import { DEFAULT_MAX_RISER_MM, levelIndex, proposeColumns, stairWellRect, stairWellSize, TREE_DEFAULTS, TREE_FALLBACK } from "../model/structure.js";
@@ -409,6 +410,18 @@ export function applyOp(draft: Draft, op: Op, opIndex: number): void {
       const prefs = { ...draft.project.prefs };
       for (const [k, v] of Object.entries(a)) if (v !== undefined) (prefs as Record<string, unknown>)[k] = v;
       draft.setPrefs(prefs);
+      return;
+    }
+
+    case "SetRate": {
+      const { code, rate } = op.args;
+      const cat = catalogueItem(code);
+      if (!rateFor(code) && !cat) throw new OpError(`"${code}" is not a rate code or catalogue id.`, "rate.unknown");
+      const key = rateFor(code) ? code : cat!.id;
+      const rates = { ...draft.project.prefs.rates };
+      if (rate === null) delete rates[key];
+      else rates[key] = rate;
+      draft.setPrefs({ ...draft.project.prefs, rates });
       return;
     }
 

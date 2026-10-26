@@ -1,9 +1,10 @@
 /** The full drawing set, in sheet order: site plan, floor plans, elevations, section, schedules. */
+import { boqTable } from "../cost/boq.js";
 import type { Project } from "../model/schema.js";
 import { elevationSheets, sectionSheet } from "./elevation.js";
 import { floorPlanSheet, type FloorPlanOptions } from "./floorplan.js";
 import { sheetsToPdf, type Paper } from "./pdf.js";
-import { scheduleSheets } from "./schedules.js";
+import { doorWindowTable, flooringTable, furnitureTable, scheduleSheets } from "./schedules.js";
 import type { Sheet } from "./sheet.js";
 import { siteplanSheet } from "./siteplan.js";
 
@@ -20,7 +21,7 @@ export function drawingSet(project: Project, opts: FloorPlanOptions = {}): Drawi
     ...project.levels.map((l) => ({ tab: l.name, sheet: floorPlanSheet(project, l.id, opts) })),
     ...elevations,
     { tab: "Section", sheet: sectionSheet(project) },
-    ...scheduleSheets(project).map((sheet, i, all) => ({ tab: all.length > 1 ? `Schedules ${i + 1}` : "Schedules", sheet })),
+    ...scheduleSheets(project, [doorWindowTable(project), flooringTable(project), furnitureTable(project), boqTable(project)]).map((sheet, i, all) => ({ tab: all.length > 1 ? `Schedules ${i + 1}` : "Schedules", sheet })),
   ];
 }
 

@@ -23,7 +23,7 @@ export type Item =
   | ({ kind: "circle"; c: Pt; r: number } & Style)
   /** A circular arc from `from` to `to` about `c`; sweep 1 runs clockwise on the sheet. */
   | ({ kind: "arc"; c: Pt; r: number; from: Pt; to: Pt; sweep: 0 | 1 } & Style)
-  | { kind: "text"; at: Pt; text: string; size: number; bold?: boolean; fill?: string; /** degrees, clockwise on the sheet */ rotate?: number };
+  | { kind: "text"; at: Pt; text: string; size: number; bold?: boolean; fill?: string; /** degrees, clockwise on the sheet */ rotate?: number; /** Which end of the text sits on `at`; default middle. */ align?: "start" | "end" };
 
 export interface Sheet {
   title: string;
@@ -82,7 +82,7 @@ export function sheetToSvg(sheet: Sheet, opts: { fluid?: boolean; id?: string } 
       case "text": {
         const rot = it.rotate ? ` transform="rotate(${it.rotate} ${r1(it.at[0])} ${r1(it.at[1])})"` : "";
         out.push(
-          `<text x="${r1(it.at[0])}" y="${r1(it.at[1])}" font-size="${it.size}" text-anchor="middle" dominant-baseline="middle"${it.bold ? ` font-weight="bold"` : ""} fill="${it.fill ?? "#000"}"${rot}>${escXml(it.text)}</text>`,
+          `<text x="${r1(it.at[0])}" y="${r1(it.at[1])}" font-size="${it.size}" text-anchor="${it.align ?? "middle"}" dominant-baseline="middle"${it.bold ? ` font-weight="bold"` : ""} fill="${it.fill ?? "#000"}"${rot}>${escXml(it.text)}</text>`,
         );
         break;
       }

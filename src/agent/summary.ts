@@ -11,6 +11,7 @@ import { clearRect, deriveWalls, resolveOpening, wallsOnSide, type Wall } from "
 import { marksById } from "../output/schedule.js";
 import { rulePacksFor } from "../rules/registry.js";
 import { catalogueItem } from "../catalogue/catalogue.js";
+import { computeBoq, formatInr } from "../cost/boq.js";
 import { vastuReport } from "../rules/vastu.js";
 import { gridRef, stairLayout, structuralGrid } from "../model/structure.js";
 import { validate } from "../engine.js";
@@ -102,6 +103,16 @@ export function modelSummary(project: Project): string {
     const rep = vastuReport(project);
     lines.push("", `Vastu (${project.prefs.vastu}, advisory): score ${rep.score} of ${rep.max}.`);
     for (const it of rep.items) lines.push(`- ${it.name}: ${it.key === "entrance" ? "faces" : "in"} ${it.zone}, ${it.grade}`);
+  }
+
+  if (project.rooms.length) {
+    const boq = computeBoq(project);
+    const top = [...boq.lines].sort((a, b) => b.amount - a.amount).slice(0, 4);
+    const overrides = Object.entries(project.prefs.rates);
+    lines.push(
+      "",
+      `Cost estimate (${boq.rateTable}): construction ${formatInr(boq.total)} incl. margin and contingency, ${formatInr(boq.perSqft)}/sq ft on ${Math.round(boq.builtUpSqm * 10.7639)} sq ft built-up${project.prefs.budgetInr ? `; budget ${formatInr(project.prefs.budgetInr)}` : ""}. Furniture and appliances ${formatInr(boq.furnitureTotal)} extra. Largest lines: ${top.map((l) => `${l.code} ${l.description.split(",")[0]} ${formatInr(l.amount)}`).join("; ")}.${overrides.length ? ` Rate overrides: ${overrides.map(([c, r]) => `${c} ${formatInr(r)}`).join(", ")}.` : ""}`,
+    );
   }
 
   const issues = validate(project).filter((f) => f.severity !== "info");

@@ -98,11 +98,13 @@ export function titleBlock(items: Item[], W: number, H: number, project: Project
     text([nc[0], nc[1] + 650], "N", TEXT, { bold: true });
   }
 
-  // Scale bar: 5 m in 1 m steps
+  // Scale bar: 5 m in 1 m steps, on scaled sheets only
   const sb: Pt = [600, H - 1050];
-  for (let i = 0; i < 5; i++) items.push({ kind: "rect", x: sb[0] + i * 1000, y: sb[1], w: 1000, h: 90, fill: i % 2 ? "#ffffff" : "#000000", stroke: "#000", sw: 10 });
-  for (let i = 0; i <= 5; i++) text([sb[0] + i * 1000, sb[1] + 230], `${i}`, SMALL - 20);
-  text([sb[0] + 5000 + 300, sb[1] + 230], "m", SMALL - 20);
+  if (opts.scaleText !== "Not to scale") {
+    for (let i = 0; i < 5; i++) items.push({ kind: "rect", x: sb[0] + i * 1000, y: sb[1], w: 1000, h: 90, fill: i % 2 ? "#ffffff" : "#000000", stroke: "#000", sw: 10 });
+    for (let i = 0; i <= 5; i++) text([sb[0] + i * 1000, sb[1] + 230], `${i}`, SMALL - 20);
+    text([sb[0] + 5000 + 300, sb[1] + 230], "m", SMALL - 20);
+  }
 
   // Advisory stamp
   const stamp: Pt = [W - 600 - 4300, H - 1150];

@@ -6,14 +6,16 @@
  *   npm run demo
  */
 import { mkdirSync, writeFileSync } from "node:fs";
-import { ftIn, ModelStore, buildScene, doorWindowTable, flooringTable, furnitureTable, openingSchedule, renderDrawingSetPdf, renderFloorPlanSvg, renderViewer3dHtml, renderViewerHtml, sceneToGlb, tableToCsv, type OpInput, type TransactionResult } from "../src/index.js";
+import { boqTable, changeSummary, ftIn, ModelStore, buildScene, doorWindowTable, flooringTable, furnitureTable, openingSchedule, renderDrawingSetPdf, renderFloorPlanSvg, renderViewer3dHtml, renderViewerHtml, sceneToGlb, tableToCsv, type OpInput, type TransactionResult } from "../src/index.js";
 import { DEMO_GROUND_FLOOR, DEMO_ROAD, demoPlot } from "../src/templates/demo-house.js";
 
 const store = new ModelStore(demoPlot());
 
 function step(label: string, ops: OpInput[], opts: { acceptBlocking?: boolean } = {}): TransactionResult {
+  const before = store.current;
   const r = store.commit(ops, { label, ...opts });
   console.log(`\n> ${label}\n  ${r.status.toUpperCase()}${r.error ? `: ${r.error.message}` : ""}`);
+  if (r.status === "committed") console.log(`  ${changeSummary(before, r.project, r.changes, r.findings)}`);
   for (const s of r.summary) console.log(`  · ${s}`);
   for (const f of r.findings.filter((f) => f.severity !== "info")) console.log(`  [${f.severity}] ${f.message}`);
   return r;
@@ -73,7 +75,7 @@ writeFileSync("out/plans.pdf", renderDrawingSetPdf(p));
 writeFileSync("out/viewer.html", renderViewerHtml(p));
 writeFileSync("out/3d.html", renderViewer3dHtml(p));
 writeFileSync("out/model.glb", sceneToGlb(buildScene(p)));
-for (const t of [doorWindowTable(p), flooringTable(p), furnitureTable(p)]) writeFileSync(`out/${t.title.toLowerCase().replace(/[^a-z]+/g, "-")}.csv`, tableToCsv(t));
+for (const t of [doorWindowTable(p), flooringTable(p), furnitureTable(p), boqTable(p)]) writeFileSync(`out/${t.title.split(" (")[0]!.toLowerCase().replace(/[^a-z]+/g, "-")}.csv`, tableToCsv(t));
 console.log(`\nVersion ${p.version}. Door and window schedule:`);
 for (const row of openingSchedule(p)) console.log(`  ${row.mark.padEnd(4)}${row.type.padEnd(11)}${row.width} × ${row.height}, sill ${row.sill}  × ${row.count}`);
 console.log("\nRule findings:");

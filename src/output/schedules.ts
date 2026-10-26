@@ -35,6 +35,8 @@ export function doorWindowTable(project: Project): Table {
 }
 
 export interface FlooringRow {
+  roomId: string;
+  finishId: string;
   room: string;
   level: string;
   finish: string;
@@ -60,6 +62,8 @@ export function flooringRows(project: Project): FlooringRow[] {
       const doors = project.openings.filter((o) => (o.type === "door" || o.type === "opening") && o.host.room === room.id).reduce((s, o) => s + o.width, 0);
       const tiled = room.type === "toilet";
       out.push({
+        roomId: room.id,
+        finishId: cat.id,
         room: room.name,
         level: level.name,
         finish: cat.name,
@@ -109,7 +113,9 @@ const csvCell = (s: string) => (/[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` 
 
 /** A table as CSV, which opens in Excel or Google Sheets. */
 export function tableToCsv(t: Table): string {
-  return [t.head, ...t.rows].map((r) => r.map(csvCell).join(",")).join("\r\n") + "\r\n";
+  // Plain numbers in numeric columns, so a spreadsheet can add them up
+  const plain = (s: string, i: number) => (t.numeric.includes(i) && /^-?[\d,]+(\.\d+)?$/.test(s) ? s.replace(/,/g, "") : s);
+  return [t.head, ...t.rows.map((r) => r.map(plain))].map((r) => r.map(csvCell).join(",")).join("\r\n") + "\r\n";
 }
 
 /** Tables laid out on A4 landscape sheets, continuing onto more sheets when long. */
@@ -138,11 +144,14 @@ export function scheduleSheets(project: Project, tables: Table[] = [doorWindowTa
       x += (w + 2) * unit;
     }
     xs.push(x);
+    // Numbers line up on the right, words on the left
+    const pad = unit;
+    const cell = (i: number) => (t.numeric.includes(i) ? { align: "end" as const, x: xs[i + 1]! - pad } : { align: "start" as const, x: xs[i]! + pad });
     const header = () => {
-      items.push({ kind: "text", at: [600 + 2000, y], text: t.title.toUpperCase(), size: TEXT, bold: true });
+      items.push({ kind: "text", at: [600, y], text: t.title.toUpperCase(), size: TEXT, bold: true, align: "start" });
       y += rowH;
       items.push({ kind: "rect", x: 600, y: y - rowH / 2, w: x - 600, h: rowH, fill: "#eeeeee" });
-      t.head.forEach((h, i) => items.push({ kind: "text", at: [(xs[i]! + xs[i + 1]!) / 2, y], text: h, size: SMALL - 10, bold: true }));
+      t.head.forEach((h, i) => items.push({ kind: "text", align: cell(i).align, at: [cell(i).x, y], text: h, size: SMALL - 10, bold: true }));
       y += rowH;
     };
     if (y + 3 * rowH > bottom) flush();
@@ -153,7 +162,7 @@ export function scheduleSheets(project: Project, tables: Table[] = [doorWindowTa
         header();
       }
       items.push({ kind: "line", a: [600, y - rowH / 2], b: [x, y - rowH / 2], stroke: "#cccccc", sw: 8 });
-      r.forEach((cell, i) => items.push({ kind: "text", at: [(xs[i]! + xs[i + 1]!) / 2, y], text: cell, size: SMALL - 20 }));
+      r.forEach((text, i) => items.push({ kind: "text", align: cell(i).align, at: [cell(i).x, y], text, size: SMALL - 20 }));
       y += rowH;
     }
     y += rowH;

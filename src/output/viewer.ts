@@ -6,6 +6,7 @@
  */
 import { revisionLabel } from "../agent/report.js";
 import { catalogueItem } from "../catalogue/catalogue.js";
+import { computeBoq, formatInr } from "../cost/boq.js";
 import { vastuReport } from "../rules/vastu.js";
 import { validate } from "../engine.js";
 import { rectArea, rectDepth, rectWidth } from "../model/geometry.js";
@@ -70,6 +71,17 @@ function vastuSection(project: Project): string {
       .join("")}</tbody></table>`;
 }
 
+function costSection(project: Project): string {
+  if (!project.rooms.length) return "";
+  const boq = computeBoq(project);
+  const trades = new Map<string, number>();
+  for (const l of boq.lines) trades.set(l.trade, (trades.get(l.trade) ?? 0) + l.amount);
+  const row = (a: string, b: number, bold = false) => `<tr${bold ? ' class="total"' : ""}><td>${escXml(a)}</td><td class="n">${formatInr(b)}</td></tr>`;
+  return `<h2>Cost estimate · ${formatInr(boq.total)} (${formatInr(boq.perSqft)}/sq ft)</h2>
+    <table><thead><tr><th>Trade</th><th class="n">Amount</th></tr></thead><tbody>${[...trades].map(([t, a]) => row(t, a)).join("")}${row("Margin and contingency", boq.margin + boq.contingency)}${row("Construction total", boq.total, true)}${boq.furnitureTotal ? row("Furniture and appliances (separate)", boq.furnitureTotal) : ""}</tbody></table>
+    <p class="note">${escXml(boq.rateTable)}, planning accuracy about ±15%. ${boq.assumptions.map(escXml).join(" ")} The full bill of quantities is in the PDF.</p>`;
+}
+
 function findingItems(findings: Finding[]): string {
   if (findings.length === 0) return `<p class="ok">All checks pass.</p>`;
   return `<ul class="issues">${findings
@@ -127,6 +139,7 @@ h2 { font-size:14px; margin:14px 0 6px; }
 table { border-collapse:collapse; width:100%; font-size:13px; }
 td, th { text-align:left; padding:4px 6px; border-bottom:1px solid var(--line); }
 td.n, th.n { text-align:right; }
+tr.total td { font-weight:700; }
 .issues { list-style:none; padding:0; margin:0; font-size:13px; }
 .issues li { padding:4px 0; border-bottom:1px solid var(--line); }
 .issues li.block b { color:var(--block); }
@@ -160,6 +173,7 @@ ${plans.map((p, i) => `<div class="plan${i === start ? " active" : ""}" data-lev
     <h2>Checks</h2>
     ${findingItems(findings)}
     ${vastuSection(project)}
+    ${costSection(project)}
     <h2>Rooms (clear sizes)</h2>
     <table><thead><tr><th>Floor</th><th>Room</th><th>Size</th><th class="n">sq ft</th></tr></thead><tbody>${roomRows(project)}</tbody></table>
     <h2>Doors and windows</h2>

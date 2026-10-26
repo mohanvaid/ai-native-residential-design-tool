@@ -2,6 +2,7 @@
  * The edit loop: ops → dry-run apply on a copy → validate → commit or report.
  * A request is one transaction: every op applies or none do.
  */
+import { costFindings } from "./cost/boq.js";
 import { validateModel } from "./model/validate.js";
 import type { Finding, Project } from "./model/schema.js";
 import { applyOp, normalize } from "./ops/apply.js";
@@ -27,7 +28,7 @@ export interface TransactionResult {
 
 export function validate(project: Project): Finding[] {
   const order = { block: 0, warn: 1, info: 2 } as const;
-  return [...validateModel(project), ...runRulePacks(project).findings, ...vastuFindings(project)].sort((a, b) => order[a.severity] - order[b.severity]);
+  return [...validateModel(project), ...runRulePacks(project).findings, ...vastuFindings(project), ...costFindings(project)].sort((a, b) => order[a.severity] - order[b.severity]);
 }
 
 /** Applies ops to a copy of the project and validates the result. Never mutates `project`. */

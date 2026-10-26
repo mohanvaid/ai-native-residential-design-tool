@@ -247,8 +247,10 @@ export const Project = z.object({
       maxSpanMm: z.number().positive().default(4500),
       /** Exterior colour theme for elevations and 3D. */
       theme: z.enum(["classic", "modern", "earthy"]).default("classic"),
+      /** Project overrides of the cost rate table, INR per unit by rate code or catalogue id. */
+      rates: z.record(z.string(), z.number().positive()).default({}),
     })
-    .default({ vastu: "off", maxSpanMm: 4500, theme: "classic" }),
+    .default({ vastu: "off", maxSpanMm: 4500, theme: "classic", rates: {} }),
   plot: Plot,
   levels: z.array(Level),
   rooms: z.array(Room),

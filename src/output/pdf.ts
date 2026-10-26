@@ -194,10 +194,10 @@ function drawItem(it: Item, T: (p: Pt) => string, k: number): string {
     case "text": {
       const size = it.size * k;
       const w = textWidth(it.text, size, it.bold);
-      // Centre on the anchor; rotation is clockwise on the sheet, i.e. negative in PDF space.
+      // Centre (or start or end) on the anchor; rotation is clockwise on the sheet, i.e. negative in PDF space.
       const a = (-(it.rotate ?? 0) * Math.PI) / 180;
       const [ax, ay] = T(it.at).split(" ").map(Number) as [number, number];
-      const dx = -w / 2;
+      const dx = it.align === "start" ? 0 : it.align === "end" ? -w : -w / 2;
       const dy = -size * 0.35;
       const x = ax + dx * Math.cos(a) - dy * Math.sin(a);
       const y = ay + dx * Math.sin(a) + dy * Math.cos(a);

@@ -4,6 +4,7 @@
  * than written by the LLM.
  */
 import { catalogueItem } from "../catalogue/catalogue.js";
+import { costDelta, formatInr } from "../cost/boq.js";
 import { boundaryToRect, rectDepth, rectWidth } from "../model/geometry.js";
 import type { Finding, Project, Room } from "../model/schema.js";
 import { formatFtIn } from "../model/units.js";
@@ -79,6 +80,12 @@ export function changeSummary(before: Project, after: Project, changes: ChangeSe
   if (changes.some((c) => c.kind === "levels")) parts.push(`levels: ${after.levels.map((l) => l.name).join(", ")}`);
   if (changes.some((c) => c.kind === "plot")) parts.push("plot updated");
   if (changes.some((c) => c.kind === "prefs")) parts.push("preferences updated");
+  if (after.rooms.length) {
+    const cost = costDelta(before, after);
+    // Under ₹5,000 is noise at this level of estimate
+    if (!before.rooms.length) parts.push(`estimate ${formatInr(cost.after)}`);
+    else if (Math.abs(cost.delta) >= 5000) parts.push(`cost ${cost.delta > 0 ? "+" : ""}${formatInr(cost.delta)} to ${formatInr(cost.after)}`);
+  }
 
   const blocks = findings.filter((f) => f.severity === "block").length;
   const warns = findings.filter((f) => f.severity === "warn").length;

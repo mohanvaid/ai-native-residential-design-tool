@@ -325,6 +325,15 @@ export const SetPreferences = z.object({
   reason,
 });
 
+export const SetRate = z.object({
+  op: z.literal("SetRate"),
+  args: z.object({
+    code: z.string().describe('A rate code from the cost table (e.g. "BW-01") or a catalogue id priced in the BOQ.'),
+    rate: z.number().positive().nullable().describe("INR per unit, material and labour; null goes back to the table rate."),
+  }),
+  reason,
+});
+
 export const Op = z.discriminatedUnion("op", [
   SetPlot,
   SetRoad,
@@ -357,6 +366,7 @@ export const Op = z.discriminatedUnion("op", [
   RemoveItem,
   SetPreferences,
   SetFinish,
+  SetRate,
 ]);
 export type Op = z.infer<typeof Op>;
 /** An op as the compiler emits it, before defaults are filled in. */
@@ -405,4 +415,5 @@ const DESCRIPTIONS: Record<OpName, string> = {
   RemoveItem: "Remove a placed item.",
   SetPreferences: "Turn Vastu checks on or off, or set the beam span limit, budget, family size or exterior colour theme.",
   SetFinish: "Choose the floor tile for one or more rooms.",
+  SetRate: "Override a cost rate for this project, e.g. a contractor's quote for brickwork; null restores the table rate.",
 };
