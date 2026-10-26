@@ -10,7 +10,8 @@ This repository holds the engine (the model, edit operations, validation, the Ta
 npm install
 npm test          # unit tests
 npm run demo      # builds a 30×40 ft east-facing house and writes plans to ./out
-ANTHROPIC_API_KEY=... npm run chat   # chat with that house in the terminal
+ANTHROPIC_API_KEY=... npm run chat   # chat with that house in the terminal; saved to ./designs
+ANTHROPIC_API_KEY=... npm run chat -- demo-house-30x40-east   # reopen a saved design
 ```
 
 `npm run demo` prints each edit as a transaction (committed, blocked or rejected) with its findings, then writes:
@@ -20,9 +21,11 @@ ANTHROPIC_API_KEY=... npm run chat   # chat with that house in the terminal
 - `out/plans.pdf`: the whole drawing set: site plan, floor plans, four elevations and a section at 1:100 on A4 or A3, then the schedules and the bill of quantities.
 - `out/model.glb`: the 3D model as binary glTF for Blender, SketchUp or any web viewer.
 - `out/*.csv`: door and window, flooring and furniture schedules and the cost estimate, for Excel or Google Sheets.
+- `out/compare.csv`: the demo's "option B" branch compared with the main design.
+- `out/designs/demo-house.json`: the saved design, with both branches and every revision.
 - `out/plan-<level>.svg` and `out/model.json`.
 
-`npm run chat` rewrites the same files after every change.
+`npm run chat` rewrites the same files after every change and saves the design. In the chat, `/revs` lists revisions, `/tag <label>` names the current one ("Sent to engineer"), `/branch <name> [from]` tries an option on its own branch, `/switch <name>` moves between branches, `/compare <ref> [ref]` compares two designs (a ref is a branch, `branch@C`, `@C` or a tag) and writes `out/compare.csv`, `/revert <rev>` brings back an earlier revision, and `/designs` lists saved designs.
 
 ## How it fits together
 
@@ -46,6 +49,7 @@ ANTHROPIC_API_KEY=... npm run chat   # chat with that house in the terminal
 | `src/output/elevation.ts` | Four elevations named by the true direction each side faces, in the project's colour theme, and a section cut through the stair. |
 | `src/output/schedules.ts` | Door and window schedule (count per floor), flooring schedule (tile, wastage, tile count, skirting) and furniture schedule, as tables, CSV and printable sheets. |
 | `src/cost/` | Cost estimate. `rates.ts` is the Chennai rate table (material and labour per unit, with the labour share); `boq.ts` takes quantities off the model (excavation, footings, columns, beams, lintels, slabs, stairs, steel by kg/m³, brickwork net of openings, plaster, paint, waterproofing, floor and wall tiles, skirting, doors, windows, railings, electrical points, plumbing sets), prices them with a 10% margin and 3% contingency, and reports cost per sq ft. Each line lists the element ids it was measured from. `costDelta` gives the change per edit, which ends every change summary (`cost +₹1.2 lakh to ₹29.6 lakh`), and `SetRate` overrides a rate for the project. Furniture is totalled separately. |
+| `src/store/` | Saved designs. `design.ts` holds a design's branches, each with its own revision history and tags; a branch starts from any revision of another and carries on its revision letters. On disk each branch is its first snapshot plus each revision's change set, replayed on load. `repository.ts` keeps one JSON file per design, written atomically. `compare.ts` compares two designs: areas, FSI, coverage, room counts, cost, open issues and Vastu, then room by room (added, removed, resized, moved, refinished). |
 | `src/output/model3d.ts`, `src/output/viewer3d.ts` | 3D massing (walls cut around openings, glazing, sunshades, slabs, parapets, stair steps, furniture blocks, trees), a glTF writer and the offline 3D viewer. |
 | `src/output/drawingset.ts` | The drawing set in sheet order, for the PDF and the viewer tabs. |
 | `src/output/sheet.ts`, `src/output/pdf.ts` | A sheet is a display list, so one drawing renders to SVG and to a dependency-free vector PDF. |

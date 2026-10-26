@@ -90,7 +90,7 @@ describe("schedules", () => {
     const tlt = rows.find((r) => r.room === "tlt")!;
     expect(tlt.finish).toBe("Anti-skid ceramic tile 300 × 300");
     expect(tlt.skirtingM).toBe(0);
-    expect(tableToCsv(flooringTable(p)).split("\r\n")[0]).toBe("Floor,Room,Finish,Clear area,Wastage,To order,Tiles,Skirting");
+    expect(tableToCsv(flooringTable(p)).split("\r\n")[0]).toBe("\uFEFFFloor,Room,Finish,Clear area,Wastage,To order,Tiles,Skirting");
   });
 
   it("rejects a finish that is not a tile", () => {

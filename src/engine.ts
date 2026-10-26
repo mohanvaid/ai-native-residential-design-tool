@@ -69,6 +69,8 @@ export interface VersionEntry {
   label: string;
   ops: Op[];
   changes: ChangeSet;
+  /** ISO time the version was made. */
+  at: string;
 }
 
 /** In-memory version history for one project, with undo from the op log. */
@@ -77,8 +79,27 @@ export class ModelStore {
   /** Versions created by commit() that have not been undone, newest last. */
   private readonly undoable: VersionEntry[] = [];
 
-  constructor(initial: Project) {
-    this.history = [{ version: initial.version, project: initial, label: "Created", ops: [], changes: [] }];
+  constructor(initial: Project, label = "Created") {
+    this.history = [{ version: initial.version, project: initial, label, ops: [], changes: [], at: new Date().toISOString() }];
+  }
+
+  /** Rebuilds a store from saved history; `undoable` lists the versions undo can still reverse, oldest first. */
+  static fromHistory(history: VersionEntry[], undoable: number[]): ModelStore {
+    if (!history.length) throw new Error("A design history needs at least one version.");
+    const store = new ModelStore(history[0]!.project);
+    store.history.splice(0, 1, ...history);
+    store.undoable.push(...undoable.map((v) => history.find((h) => h.version === v)).filter((h): h is VersionEntry => !!h));
+    return store;
+  }
+
+  /** Versions undo can still reverse, oldest first. */
+  get undoableVersions(): number[] {
+    return this.undoable.map((h) => h.version);
+  }
+
+  /** The project as it was at an earlier version. */
+  at(version: number): Project | undefined {
+    return this.history.find((h) => h.version === version)?.project;
   }
 
   get current(): Project {
@@ -104,6 +125,7 @@ export class ModelStore {
       label: opts.label ?? ops.map((o) => o.reason ?? o.op).join("; "),
       ops: ops.map((o) => Op.parse(o)),
       changes: result.changes,
+      at: new Date().toISOString(),
     };
     this.history.push(entry);
     this.undoable.push(entry);
@@ -128,7 +150,7 @@ export class ModelStore {
   private pushRestore(restored: Project, label: string, reversed: ChangeSet): TransactionResult {
     const project = { ...structuredClone(restored), version: this.current.version + 1 };
     const changes: ChangeSet = reversed.map((c) => ({ ...c, before: c.after, after: c.before }) as ChangeSet[number]).reverse();
-    this.history.push({ version: project.version, project, label, ops: [], changes });
+    this.history.push({ version: project.version, project, label, ops: [], changes, at: new Date().toISOString() });
     return { status: "committed", project, changes, summary: [label], findings: validate(project) };
   }
 }

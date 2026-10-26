@@ -113,6 +113,15 @@ const csvCell = (s: string) => (/[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` 
 
 /** A table as CSV, which opens in Excel or Google Sheets. */
 export function tableToCsv(t: Table): string {
+  return tablesToCsv([t]);
+}
+
+/** Several tables in one CSV, a blank row apart. Starts with a byte-order mark so Excel reads ₹ and × correctly. */
+export function tablesToCsv(tables: Table[]): string {
+  return "\uFEFF" + tables.map(csvRows).join("\r\n");
+}
+
+function csvRows(t: Table): string {
   // Plain numbers in numeric columns, so a spreadsheet can add them up
   const plain = (s: string, i: number) => (t.numeric.includes(i) && /^-?[\d,]+(\.\d+)?$/.test(s) ? s.replace(/,/g, "") : s);
   return [t.head, ...t.rows.map((r) => r.map(plain))].map((r) => r.map(csvCell).join(",")).join("\r\n") + "\r\n";

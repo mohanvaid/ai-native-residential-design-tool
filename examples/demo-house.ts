@@ -6,14 +6,15 @@
  *   npm run demo
  */
 import { mkdirSync, writeFileSync } from "node:fs";
-import { boqTable, changeSummary, ftIn, ModelStore, buildScene, doorWindowTable, flooringTable, furnitureTable, openingSchedule, renderDrawingSetPdf, renderFloorPlanSvg, renderViewer3dHtml, renderViewerHtml, sceneToGlb, tableToCsv, type OpInput, type TransactionResult } from "../src/index.js";
+import { boqTable, changeSummary, compareProjects, comparisonTables, comparisonText, Design, FileRepository, ftIn, revisionLabel, buildScene, doorWindowTable, flooringTable, furnitureTable, openingSchedule, renderDrawingSetPdf, renderFloorPlanSvg, renderViewer3dHtml, renderViewerHtml, sceneToGlb, tablesToCsv, tableToCsv, type OpInput, type TransactionResult } from "../src/index.js";
 import { DEMO_GROUND_FLOOR, DEMO_ROAD, demoPlot } from "../src/templates/demo-house.js";
 
-const store = new ModelStore(demoPlot());
+const design = new Design("demo-house", "Demo house, 30×40 East", demoPlot());
+const store = design.store;
 
 function step(label: string, ops: OpInput[], opts: { acceptBlocking?: boolean } = {}): TransactionResult {
-  const before = store.current;
-  const r = store.commit(ops, { label, ...opts });
+  const before = design.store.current;
+  const r = design.store.commit(ops, { label, ...opts });
   console.log(`\n> ${label}\n  ${r.status.toUpperCase()}${r.error ? `: ${r.error.message}` : ""}`);
   if (r.status === "committed") console.log(`  ${changeSummary(before, r.project, r.changes, r.findings)}`);
   for (const s of r.summary) console.log(`  · ${s}`);
@@ -67,8 +68,26 @@ const undone = store.undo();
 console.log(`\n> Undo the last change\n  ${undone?.summary.join("; ")}`);
 step("Redo it: put the columns back", store.versions.find((v) => v.label.startsWith("Frame it"))!.ops);
 
-const p = store.current;
+design.tag("Sent to engineer");
+
+// Try an option on a branch, compare it with main, and save both
+design.createBranch("option-b");
+step("Option B: a study upstairs next to the toilet, and wooden flooring in the lounge", [
+  { op: "AddRoom", args: { id: "rm_study", name: "Study", type: "study", level: "lv_ff", x: 2400, y: 4800, width: 2400, depth: 1800 } },
+  { op: "AddOpening", args: { type: "window", room: "rm_study", side: "north", width: 1200 } },
+  { op: "AddOpening", args: { type: "door", room: "rm_study", side: "south", offset: 1500, width: 750 } },
+  { op: "SetFinish", args: { rooms: ["rm_lng"], catalogue: "tile.wood-laminate" } },
+]);
+const sent = design.resolve("Sent to engineer");
+const cmp = compareProjects(sent.project, design.store.current, { a: `main Rev ${revisionLabel(sent.version)}`, b: `option-b Rev ${revisionLabel(design.store.current.version)}` });
+console.log(`\n${comparisonText(cmp)}`);
+design.switchTo("main");
 mkdirSync("out", { recursive: true });
+writeFileSync("out/compare.csv", tablesToCsv(comparisonTables(cmp)));
+const saved = new FileRepository("out/designs").save(design);
+console.log(`Saved ${saved} with branches ${[...design.branches.keys()].join(", ")}.`);
+
+const p = store.current;
 for (const level of p.levels) writeFileSync(`out/plan-${level.id}.svg`, renderFloorPlanSvg(p, level.id));
 writeFileSync("out/model.json", JSON.stringify(p, null, 2));
 writeFileSync("out/plans.pdf", renderDrawingSetPdf(p));
@@ -80,4 +99,4 @@ console.log(`\nVersion ${p.version}. Door and window schedule:`);
 for (const row of openingSchedule(p)) console.log(`  ${row.mark.padEnd(4)}${row.type.padEnd(11)}${row.width} × ${row.height}, sill ${row.sill}  × ${row.count}`);
 console.log("\nRule findings:");
 for (const f of store.commit([]).findings.filter((f) => f.source !== "core")) console.log(`  [${f.severity}] ${f.message}`);
-console.log("\nWrote out/viewer.html and out/3d.html (open on a phone), out/plans.pdf, out/model.glb, schedule CSVs, out/plan-lv_gf.svg, out/plan-lv_ff.svg, out/model.json");
+console.log("\nWrote out/viewer.html and out/3d.html (open on a phone), out/plans.pdf, out/model.glb, schedule CSVs, out/compare.csv, out/designs/demo-house.json, out/plan-lv_gf.svg, out/plan-lv_ff.svg, out/model.json");
