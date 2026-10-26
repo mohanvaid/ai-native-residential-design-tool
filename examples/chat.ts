@@ -9,7 +9,7 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { createInterface } from "node:readline/promises";
 import { DesignAgent } from "../src/agent/agent.js";
-import { ModelStore, renderFloorPlanPdf, renderFloorPlanSvg, renderViewerHtml } from "../src/index.js";
+import { ModelStore, renderDrawingSetPdf, renderFloorPlanSvg, renderViewer3dHtml, renderViewerHtml } from "../src/index.js";
 import { DEMO_GROUND_FLOOR, DEMO_ROAD, demoPlot } from "../src/templates/demo-house.js";
 
 if (!process.env.ANTHROPIC_API_KEY && !process.env.ANTHROPIC_AUTH_TOKEN) {
@@ -25,8 +25,9 @@ const agent = new DesignAgent(store);
 function writePlans(): void {
   mkdirSync("out", { recursive: true });
   for (const level of store.current.levels) writeFileSync(`out/plan-${level.id}.svg`, renderFloorPlanSvg(store.current, level.id));
-  writeFileSync("out/plans.pdf", renderFloorPlanPdf(store.current));
+  writeFileSync("out/plans.pdf", renderDrawingSetPdf(store.current));
   writeFileSync("out/viewer.html", renderViewerHtml(store.current));
+  writeFileSync("out/3d.html", renderViewer3dHtml(store.current));
 }
 
 writePlans();

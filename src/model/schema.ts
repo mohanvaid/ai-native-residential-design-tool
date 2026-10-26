@@ -245,8 +245,10 @@ export const Project = z.object({
       familySize: z.number().int().positive().optional(),
       /** Beam spans longer than this, in mm, are flagged for the engineer. */
       maxSpanMm: z.number().positive().default(4500),
+      /** Exterior colour theme for elevations and 3D. */
+      theme: z.enum(["classic", "modern", "earthy"]).default("classic"),
     })
-    .default({ vastu: "off", maxSpanMm: 4500 }),
+    .default({ vastu: "off", maxSpanMm: 4500, theme: "classic" }),
   plot: Plot,
   levels: z.array(Level),
   rooms: z.array(Room),

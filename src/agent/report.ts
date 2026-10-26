@@ -78,7 +78,7 @@ export function changeSummary(before: Project, after: Project, changes: ChangeSe
   }
   if (changes.some((c) => c.kind === "levels")) parts.push(`levels: ${after.levels.map((l) => l.name).join(", ")}`);
   if (changes.some((c) => c.kind === "plot")) parts.push("plot updated");
-  if (changes.some((c) => c.kind === "prefs")) parts.push(`preferences updated (Vastu ${after.prefs.vastu})`);
+  if (changes.some((c) => c.kind === "prefs")) parts.push("preferences updated");
 
   const blocks = findings.filter((f) => f.severity === "block").length;
   const warns = findings.filter((f) => f.severity === "warn").length;

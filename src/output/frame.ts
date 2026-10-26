@@ -77,7 +77,18 @@ export function sheetFrame(project: Project, opts: { showSetbacks?: boolean } = 
   // Plot size
   text([X((plot.x0 + plot.x1) / 2), Y(plot.y1) - ROAD_DEPTH - 500], `PLOT ${formatFtIn(rectWidth(plot))} × ${formatFtIn(rectDepth(plot))}`, SMALL, { fill: "#555" });
 
-  const finish = (title: string, note: string): Sheet => {
+  const finish = (title: string, note: string): Sheet => titleBlock(items, W, H, project, title, note);
+
+  return { items, plot, W, H, X, Y, P, box, text, finish };
+}
+
+/**
+ * North arrow (when asked), 5 m scale bar, advisory stamp and title block
+ * along the bottom of a W × H sheet drawn at 1:100.
+ */
+export function titleBlock(items: Item[], W: number, H: number, project: Project, title: string, note: string, opts: { north?: boolean; scaleText?: string } = {}): Sheet {
+  const text = (at: Pt, s: string, size: number, o: { rotate?: number; bold?: boolean; fill?: string } = {}) => items.push({ kind: "text", at, text: s, size, ...o });
+  if (opts.north !== false) {
     // North arrow, rotated so it points to true north
     const nc: Pt = [W - 900, 900];
     const a = (project.plot.northAngle * Math.PI) / 180;
@@ -85,26 +96,24 @@ export function sheetFrame(project: Project, opts: { showSetbacks?: boolean } = 
     items.push({ kind: "circle", c: nc, r: 420, stroke: "#000", sw: 20 });
     items.push({ kind: "poly", pts: ([[0, -380], [160, 250], [0, 140], [-160, 250]] as Pt[]).map(rot), closed: true, fill: "#000" });
     text([nc[0], nc[1] + 650], "N", TEXT, { bold: true });
+  }
 
-    // Scale bar: 5 m in 1 m steps
-    const sb: Pt = [600, H - 1050];
-    for (let i = 0; i < 5; i++) items.push({ kind: "rect", x: sb[0] + i * 1000, y: sb[1], w: 1000, h: 90, fill: i % 2 ? "#ffffff" : "#000000", stroke: "#000", sw: 10 });
-    for (let i = 0; i <= 5; i++) text([sb[0] + i * 1000, sb[1] + 230], `${i}`, SMALL - 20);
-    text([sb[0] + 5000 + 300, sb[1] + 230], "m", SMALL - 20);
+  // Scale bar: 5 m in 1 m steps
+  const sb: Pt = [600, H - 1050];
+  for (let i = 0; i < 5; i++) items.push({ kind: "rect", x: sb[0] + i * 1000, y: sb[1], w: 1000, h: 90, fill: i % 2 ? "#ffffff" : "#000000", stroke: "#000", sw: 10 });
+  for (let i = 0; i <= 5; i++) text([sb[0] + i * 1000, sb[1] + 230], `${i}`, SMALL - 20);
+  text([sb[0] + 5000 + 300, sb[1] + 230], "m", SMALL - 20);
 
-    // Advisory stamp
-    const stamp: Pt = [W - 600 - 4300, H - 1150];
-    items.push({ kind: "rect", x: stamp[0], y: stamp[1], w: 4300, h: 300, stroke: "#c0392b", sw: 20 });
-    text([stamp[0] + 2150, stamp[1] + 150], ADVISORY_STAMP, SMALL - 30, { bold: true, fill: "#c0392b" });
+  // Advisory stamp
+  const stamp: Pt = [W - 600 - 4300, H - 1150];
+  items.push({ kind: "rect", x: stamp[0], y: stamp[1], w: 4300, h: 300, stroke: "#c0392b", sw: 20 });
+  text([stamp[0] + 2150, stamp[1] + 150], ADVISORY_STAMP, SMALL - 30, { bold: true, fill: "#c0392b" });
 
-    // Title block
-    const full = `${project.name} · ${title} · Scale 1:100 · Rev ${revisionLabel(project.version)}`;
-    text([W / 2, H - 450], full, TEXT, { bold: true });
-    text([W / 2, H - 180], note, SMALL - 20, { fill: "#555" });
-    return { title: full, width: W, height: H, scale: 100, items };
-  };
-
-  return { items, plot, W, H, X, Y, P, box, text, finish };
+  // Title block
+  const full = `${project.name} · ${title} · ${opts.scaleText ?? "Scale 1:100"} · Rev ${revisionLabel(project.version)}`;
+  text([W / 2, H - 450], full, TEXT, { bold: true });
+  text([W / 2, H - 180], note, SMALL - 20, { fill: "#555" });
+  return { title: full, width: W, height: H, scale: 100, items };
 }
 
 /** Tree: trunk, dashed canopy, dotted root zone (kept trees only) and a label. A tree to be removed is crossed out. */

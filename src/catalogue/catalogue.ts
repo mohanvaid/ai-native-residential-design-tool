@@ -9,7 +9,7 @@
  */
 import type { RoomType } from "../model/schema.js";
 
-export type Category = "furniture" | "sanitary" | "appliance" | "vehicle" | "door" | "window";
+export type Category = "furniture" | "sanitary" | "appliance" | "vehicle" | "door" | "window" | "tile";
 
 /** How a plan symbol is drawn. */
 export type Symbol = "bed" | "sofa" | "sofa-chaise" | "table" | "dining" | "wardrobe" | "unit" | "desk" | "swing" | "wc" | "wc-indian" | "basin" | "shower" | "appliance" | "car" | "scooter" | "box";
@@ -33,7 +33,10 @@ export interface CatalogueItem {
   handed?: boolean;
   /** Services it needs, for the MEP schedule later. */
   services?: ("socket" | "water" | "drain" | "ac-point")[];
+  /** Price band in INR, per piece, or per m² laid for tiles. */
   priceInr: [number, number];
+  /** Tiles only: share to add for cutting and breakage. */
+  wastage?: number;
 }
 
 const C = (front: number, sides = 0, back = 0) => ({ front, sides, back });
@@ -83,7 +86,20 @@ export const CATALOGUE: readonly CatalogueItem[] = [
   { id: "window.upvc-1500@1", name: "uPVC sliding window, 1500", category: "window", symbol: "box", width: 1500, depth: 0, height: 1200, clearance: C(0), priceInr: [14000, 24000] },
   { id: "window.upvc-1200@1", name: "uPVC sliding window, 1200", category: "window", symbol: "box", width: 1200, depth: 0, height: 1200, clearance: C(0), priceInr: [11000, 19000] },
   { id: "ventilator.600@1", name: "Ventilator with louvres, 600", category: "window", symbol: "box", width: 600, depth: 0, height: 450, clearance: C(0), priceInr: [2500, 5000] },
+  // Floor finishes: size is the tile, price per m² laid.
+  { id: "tile.vitrified-600@1", name: "Vitrified tile 600 × 600", category: "tile", symbol: "box", width: 600, depth: 600, height: 10, clearance: C(0), wastage: 0.1, priceInr: [900, 1800] },
+  { id: "tile.vitrified-800@1", name: "Vitrified tile 800 × 800", category: "tile", symbol: "box", width: 800, depth: 800, height: 10, clearance: C(0), wastage: 0.12, priceInr: [1200, 2400] },
+  { id: "tile.ceramic-antiskid-300@1", name: "Anti-skid ceramic tile 300 × 300", category: "tile", symbol: "box", width: 300, depth: 300, height: 8, clearance: C(0), wastage: 0.07, priceInr: [700, 1300] },
+  { id: "tile.granite-flamed@1", name: "Flamed granite 600 × 600", category: "tile", symbol: "box", width: 600, depth: 600, height: 18, clearance: C(0), wastage: 0.08, priceInr: [1800, 3200] },
+  { id: "tile.wood-laminate@1", name: "Wooden laminate 1200 × 200", category: "tile", symbol: "box", width: 1200, depth: 200, height: 8, clearance: C(0), wastage: 0.08, priceInr: [1300, 2600] },
 ];
+
+/** The floor finish a room gets when none is chosen. */
+export function defaultFloorFinish(type: RoomType): string {
+  if (type === "toilet" || type === "utility" || type === "balcony") return "tile.ceramic-antiskid-300@1";
+  if (type === "car-porch" || type === "sit-out") return "tile.granite-flamed@1";
+  return "tile.vitrified-600@1";
+}
 
 const BY_ID = new Map(CATALOGUE.map((c) => [c.id, c]));
 
@@ -95,8 +111,8 @@ export function catalogueItem(id: string): CatalogueItem | undefined {
 
 const version = (id: string) => Number(id.split("@")[1] ?? 0);
 
-/** Items that can be placed in rooms (not doors and windows). */
-export const PLACEABLE = CATALOGUE.filter((c) => c.category !== "door" && c.category !== "window");
+/** Items that can be placed in rooms (not doors, windows or finishes). */
+export const PLACEABLE = CATALOGUE.filter((c) => c.category !== "door" && c.category !== "window" && c.category !== "tile");
 
 /** One line per entry, for the agent's system prompt. */
 export function catalogueDigest(): string {

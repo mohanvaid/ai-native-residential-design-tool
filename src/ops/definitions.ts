@@ -303,6 +303,16 @@ export const SwapItem = z.object({
 
 export const RemoveItem = z.object({ op: z.literal("RemoveItem"), target: z.string(), reason });
 
+export const SetFinish = z.object({
+  op: z.literal("SetFinish"),
+  args: z.object({
+    rooms: z.array(z.string()).min(1).describe("Room ids to finish."),
+    surface: z.literal("floor").default("floor"),
+    catalogue: z.string().describe("A tile.* catalogue id."),
+  }),
+  reason,
+});
+
 export const SetPreferences = z.object({
   op: z.literal("SetPreferences"),
   args: z.object({
@@ -310,6 +320,7 @@ export const SetPreferences = z.object({
     maxSpanMm: positiveMm.optional().describe("Beam span limit for the structural sanity check."),
     budgetInr: z.number().positive().optional(),
     familySize: z.number().int().positive().optional(),
+    theme: z.enum(["classic", "modern", "earthy"]).optional().describe("Exterior colour theme for elevations and 3D."),
   }),
   reason,
 });
@@ -345,6 +356,7 @@ export const Op = z.discriminatedUnion("op", [
   SwapItem,
   RemoveItem,
   SetPreferences,
+  SetFinish,
 ]);
 export type Op = z.infer<typeof Op>;
 /** An op as the compiler emits it, before defaults are filled in. */
@@ -391,5 +403,6 @@ const DESCRIPTIONS: Record<OpName, string> = {
   MoveItem: "Move or turn a placed item: by dx/dy, to a wall, to a new centre, or into another room.",
   SwapItem: "Replace a placed item with another catalogue entry (e.g. queen bed to king) in the same place.",
   RemoveItem: "Remove a placed item.",
-  SetPreferences: "Turn Vastu checks on or off, or set the beam span limit, budget or family size.",
+  SetPreferences: "Turn Vastu checks on or off, or set the beam span limit, budget, family size or exterior colour theme.",
+  SetFinish: "Choose the floor tile for one or more rooms.",
 };

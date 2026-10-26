@@ -12,10 +12,10 @@ import { rectArea, rectDepth, rectWidth } from "../model/geometry.js";
 import type { Finding, Project } from "../model/schema.js";
 import { formatFtIn, sqmToSqft } from "../model/units.js";
 import { clearRect, deriveWalls } from "../model/walls.js";
-import { ADVISORY_STAMP, floorPlanSheet, renderFloorPlanPdf } from "./floorplan.js";
+import { drawingSet, renderDrawingSetPdf } from "./drawingset.js";
+import { ADVISORY_STAMP } from "./floorplan.js";
 import { openingSchedule } from "./schedule.js";
 import { escXml, sheetToSvg } from "./sheet.js";
-import { siteplanSheet } from "./siteplan.js";
 
 export interface ViewerOptions {
   /** Embed the plans PDF so the viewer can download it offline. Default true. */
@@ -80,12 +80,11 @@ function findingItems(findings: Finding[]): string {
 export function renderViewerHtml(project: Project, opts: ViewerOptions = {}): string {
   const rev = revisionLabel(project.version);
   const findings = opts.findings ?? validate(project);
-  const plans = [
-    { id: "site", name: "Site", sheet: siteplanSheet(project) },
-    ...project.levels.map((l) => ({ id: l.id, name: l.name, sheet: floorPlanSheet(project, l.id) })),
-  ].map((p, i) => ({ ...p, svg: sheetToSvg(p.sheet, { fluid: true, id: `sheet-${i}` }) }));
+  const plans = drawingSet(project)
+    .filter((d) => !d.tab.startsWith("Schedules"))
+    .map((d, i) => ({ id: d.tab, name: d.tab, svg: sheetToSvg(d.sheet, { fluid: true, id: `sheet-${i}` }) }));
   const start = plans.length > 1 ? 1 : 0;
-  const pdf = opts.includePdf === false ? "" : Buffer.from(renderFloorPlanPdf(project)).toString("base64");
+  const pdf = opts.includePdf === false ? "" : Buffer.from(renderDrawingSetPdf(project)).toString("base64");
   const fileBase = `${project.name.replace(/[^\w-]+/g, "-").replace(/^-|-$/g, "")}-rev-${rev}`;
   const count = (sev: Finding["severity"]) => findings.filter((f) => f.severity === sev).length;
   const status = [
@@ -167,7 +166,7 @@ ${plans.map((p, i) => `<div class="plan${i === start ? " active" : ""}" data-lev
     <table><thead><tr><th>Mark</th><th>Type</th><th>W × H</th><th class="n">No.</th></tr></thead><tbody>${openingRows(project)}</tbody></table>
     ${project.items.length ? `<h2>Furniture and fixtures</h2>
     <table><thead><tr><th>Room</th><th>Item</th><th>Size</th><th class="n">Price band</th></tr></thead><tbody>${itemRows(project)}</tbody></table>` : ""}
-    ${pdf ? `<a class="download" id="pdf" href="#" download="${fileBase}.pdf">Download plans as PDF</a>` : ""}
+    ${pdf ? `<a class="download" id="pdf" href="#" download="${fileBase}.pdf">Download drawings as PDF</a>` : ""}
     <p class="note">Room sizes are clear internal dimensions. Areas are carpet. Not for construction until checked and signed off by a registered professional.</p>
   </div>
 </details>

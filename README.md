@@ -16,7 +16,10 @@ ANTHROPIC_API_KEY=... npm run chat   # chat with that house in the terminal
 `npm run demo` prints each edit as a transaction (committed, blocked or rejected) with its findings, then writes:
 
 - `out/viewer.html`: one self-contained file for sharing (for example over WhatsApp). It opens offline on a phone, with tabs for the site plan and each floor, drag and pinch to pan and zoom, +/−/Fit buttons, the room, door/window and furniture schedules, the open checks, and a button to download the PDF.
-- `out/plans.pdf`: the site plan and one page per floor, at 1:100 on A4 or A3.
+- `out/3d.html`: an offline 3D view (three.js inlined, about 0.7 MB) with buttons to zoom, turn, jump to each side or the top, and cut away upper floors.
+- `out/plans.pdf`: the whole drawing set: site plan, floor plans, four elevations and a section at 1:100 on A4 or A3, then the schedules.
+- `out/model.glb`: the 3D model as binary glTF for Blender, SketchUp or any web viewer.
+- `out/*.csv`: door and window, flooring and furniture schedules for Excel or Google Sheets.
 - `out/plan-<level>.svg` and `out/model.json`.
 
 `npm run chat` rewrites the same files after every change.
@@ -40,12 +43,16 @@ ANTHROPIC_API_KEY=... npm run chat   # chat with that house in the terminal
 | `src/model/wetstack.ts` | Wet stacking: toilets, kitchens and utilities over wet rooms below, never a toilet over a bedroom, kitchen, pooja or dining room, and an outside wall for pipes. |
 | `src/rules/vastu.ts` | Opt-in Vastu (`SetPreferences { vastu: "prefer" | "strict" }`): entrance, kitchen, master bedroom, pooja, toilets and stair scored by true-north zone, and the open centre. Advisory only, never blocking; the site plan shows the nine zones when it is on. |
 | `src/output/siteplan.ts` | Site plan at 1:100: trees with canopy and root zones, ground footprint, upper-floor outlines, stairs, column grid and an area statement. |
+| `src/output/elevation.ts` | Four elevations named by the true direction each side faces, in the project's colour theme, and a section cut through the stair. |
+| `src/output/schedules.ts` | Door and window schedule (count per floor), flooring schedule (tile, wastage, tile count, skirting) and furniture schedule, as tables, CSV and printable sheets. |
+| `src/output/model3d.ts`, `src/output/viewer3d.ts` | 3D massing (walls cut around openings, glazing, sunshades, slabs, parapets, stair steps, furniture blocks, trees), a glTF writer and the offline 3D viewer. |
+| `src/output/drawingset.ts` | The drawing set in sheet order, for the PDF and the viewer tabs. |
 | `src/output/sheet.ts`, `src/output/pdf.ts` | A sheet is a display list, so one drawing renders to SVG and to a dependency-free vector PDF. |
 | `src/output/viewer.ts` | The shareable single-file HTML viewer. |
 
 ### Edit operations
 
-`SetPlot`, `SetRoad`, `AddLevel`, `RemoveLevel`, `SetLevelHeight`, `AddRoom`, `RemoveRoom`, `ResizeRoom` (by distance or to a target area), `MoveRoom`, `RenameRoom`, `SetRoomType`, `AddOpening`, `MoveOpening`, `ResizeOpening`, `RemoveOpening`, `AddTree`, `UpdateTree`, `RemoveTree`, `AddColumn`, `MoveColumn`, `RemoveColumn`, `PlaceColumns` (a column at every wall corner and junction, splitting runs longer than the span limit), `AddStair` (sized to fit when no well size is given), `UpdateStair`, `RemoveStair`, `PlaceItem` (finds a spot when no wall is given), `MoveItem`, `SwapItem`, `RemoveItem`, `SetPreferences` (Vastu, span limit, budget, family size).
+`SetPlot`, `SetRoad`, `AddLevel`, `RemoveLevel`, `SetLevelHeight`, `AddRoom`, `RemoveRoom`, `ResizeRoom` (by distance or to a target area), `MoveRoom`, `RenameRoom`, `SetRoomType`, `AddOpening`, `MoveOpening`, `ResizeOpening`, `RemoveOpening`, `AddTree`, `UpdateTree`, `RemoveTree`, `AddColumn`, `MoveColumn`, `RemoveColumn`, `PlaceColumns` (a column at every wall corner and junction, splitting runs longer than the span limit), `AddStair` (sized to fit when no well size is given), `UpdateStair`, `RemoveStair`, `PlaceItem` (finds a spot when no wall is given), `MoveItem`, `SwapItem`, `RemoveItem`, `SetPreferences` (Vastu, span limit, budget, family size, colour theme), `SetFinish` (floor tiles per room).
 
 Every op shares one shape, `{ op, target?, args, reason? }`. A request is one transaction: all ops apply or none do. Each transaction returns a change set (what changed, used for "what did the AI change?") and undo replays it backwards.
 
@@ -66,4 +73,5 @@ Values were transcribed from the extracted Gazette text, and each cell cites its
 - Plinth height is not modelled, so building height is the sum of floor-to-floor heights.
 - Columns are checked for alignment, spans and support only; member sizes, beams and foundations are for the structural engineer.
 - Stair headroom is not checked yet, and lifts and shafts are not modelled.
-- MEP, sections, 3D, schedules and costing are later slices.
+- Elevations show external walls and openings; balconies, railings, staircase towers and roof details are not modelled yet.
+- MEP and costing are later slices.

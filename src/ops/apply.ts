@@ -393,6 +393,17 @@ export function applyOp(draft: Draft, op: Op, opIndex: number): void {
       return;
     }
 
+    case "SetFinish": {
+      const a = op.args;
+      const cat = catalogueItem(a.catalogue);
+      if (!cat || cat.category !== "tile") throw new OpError(`"${a.catalogue}" is not a floor finish in the catalogue.`, "catalogue.missing");
+      for (const id of a.rooms) {
+        const room = draft.requireRoom(id);
+        draft.putRoom({ ...room, finishes: { ...room.finishes, floor: cat.id } });
+      }
+      return;
+    }
+
     case "SetPreferences": {
       const a = op.args;
       const prefs = { ...draft.project.prefs };
@@ -413,6 +424,7 @@ function requireCatalogue(id: string): CatalogueItem {
   const cat = catalogueItem(id);
   if (!cat) throw new OpError(`"${id}" is not in the catalogue.`, "catalogue.missing");
   if (cat.category === "door" || cat.category === "window") throw new OpError(`"${id}" is a ${cat.category}; add it with AddOpening.`, "catalogue.not_placeable");
+  if (cat.category === "tile") throw new OpError(`"${id}" is a floor finish; set it with SetFinish.`, "catalogue.not_placeable");
   return cat;
 }
 

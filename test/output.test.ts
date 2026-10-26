@@ -39,20 +39,22 @@ describe("viewer", () => {
   it("is one self-contained file with every level, schedules and the PDF", () => {
     const html = renderViewerHtml(demo());
     expect(html).not.toMatch(/<(script|link|img)[^>]+(src|href)="https?:/);
-    expect(html.match(/<svg /g)).toHaveLength(3);
+    // Site, two floors, four elevations and a section
+    expect(html.match(/<svg /g)).toHaveLength(8);
+    expect(html).toContain(">Section</button>");
     expect(html).toContain(">Site</button>");
     expect(html).toContain(">Ground</button>");
     expect(html).toContain(">First</button>");
     expect(html).toContain("ADVISORY · NOT FOR CONSTRUCTION OR APPROVAL");
     expect(html).toContain("Rev C");
     expect(html).toContain("<td>D1</td>");
-    expect(html).toContain("Download plans as PDF");
+    expect(html).toContain("Download drawings as PDF");
     expect(html).toContain('id="zin"');
   });
 
   it("can leave the PDF out to stay small", () => {
     const html = renderViewerHtml(demo(), { includePdf: false });
-    expect(html).not.toContain("Download plans as PDF");
+    expect(html).not.toContain("Download drawings as PDF");
     expect(html.length).toBeLessThan(renderViewerHtml(demo()).length);
   });
 });
