@@ -57,6 +57,8 @@ step("Furnish it", [
   { op: "PlaceItem", args: { id: "it_bed2", catalogue: "bed.double", room: "rm_bed2", against: "west" } },
 ]);
 
+step("The family wants Vastu considered, as advice only", [{ op: "SetPreferences", args: { vastu: "prefer" } }]);
+
 step("Frame it: columns at every wall corner and junction", [{ op: "PlaceColumns", args: {} }]);
 
 const undone = store.undo();

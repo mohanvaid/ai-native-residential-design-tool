@@ -8,6 +8,7 @@ import { applyOp, normalize } from "./ops/apply.js";
 import { applyChangeSet, describeChanges, Draft, OpError, type ChangeSet } from "./ops/changes.js";
 import { Op, type OpInput } from "./ops/definitions.js";
 import { runRulePacks } from "./rules/registry.js";
+import { vastuFindings } from "./rules/vastu.js";
 
 export interface TransactionResult {
   /**
@@ -26,7 +27,7 @@ export interface TransactionResult {
 
 export function validate(project: Project): Finding[] {
   const order = { block: 0, warn: 1, info: 2 } as const;
-  return [...validateModel(project), ...runRulePacks(project).findings].sort((a, b) => order[a.severity] - order[b.severity]);
+  return [...validateModel(project), ...runRulePacks(project).findings, ...vastuFindings(project)].sort((a, b) => order[a.severity] - order[b.severity]);
 }
 
 /** Applies ops to a copy of the project and validates the result. Never mutates `project`. */

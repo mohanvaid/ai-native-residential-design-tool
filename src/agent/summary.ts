@@ -11,20 +11,15 @@ import { clearRect, deriveWalls, resolveOpening, wallsOnSide, type Wall } from "
 import { marksById } from "../output/schedule.js";
 import { rulePacksFor } from "../rules/registry.js";
 import { catalogueItem } from "../catalogue/catalogue.js";
+import { vastuReport } from "../rules/vastu.js";
 import { gridRef, stairLayout, structuralGrid } from "../model/structure.js";
 import { validate } from "../engine.js";
 import { revisionLabel } from "./report.js";
+import { trueFacing } from "../model/zones.js";
+
+export { trueFacing };
 
 const COMPASS: Record<Side, string> = { north: "N", south: "S", east: "E", west: "W" };
-
-/** Which true-compass direction each plot side faces, e.g. plot "north" → "NE" when northAngle is 45°. */
-export function trueFacing(northAngle: number): Record<Side, string> {
-  const names = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"];
-  const base: Record<Side, number> = { north: 0, east: 90, south: 180, west: 270 };
-  const out = {} as Record<Side, string>;
-  for (const side of SIDES) out[side] = names[Math.round((((base[side] - northAngle) % 360) + 360) % 360 / 45) % 8]!;
-  return out;
-}
 
 export function modelSummary(project: Project): string {
   const lines: string[] = [];
@@ -101,6 +96,12 @@ export function modelSummary(project: Project): string {
     const grid = structuralGrid(project);
     lines.push("", `Columns: ${project.columns.length}, max beam span ${project.prefs.maxSpanMm} mm. Grid ${grid.x.map((g) => `${g.label}=${g.at}`).join(" ")} (x), ${grid.y.map((g) => `${g.label}=${g.at}`).join(" ")} (y).`);
     for (const c of project.columns) lines.push(`- ${c.id} ${gridRef(project, c, grid)} ${c.width}×${c.depth} at (${c.at[0]}, ${c.at[1]}), ${c.fromLevel}–${c.toLevel}`);
+  }
+
+  if (project.prefs.vastu !== "off") {
+    const rep = vastuReport(project);
+    lines.push("", `Vastu (${project.prefs.vastu}, advisory): score ${rep.score} of ${rep.max}.`);
+    for (const it of rep.items) lines.push(`- ${it.name}: ${it.key === "entrance" ? "faces" : "in"} ${it.zone}, ${it.grade}`);
   }
 
   const issues = validate(project).filter((f) => f.severity !== "info");

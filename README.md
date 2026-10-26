@@ -37,13 +37,15 @@ ANTHROPIC_API_KEY=... npm run chat   # chat with that house in the terminal
 | `src/output/floorplan.ts` | Floor plan sheet at 1:100: hatched walls, door swings, window symbols, D/W/V marks, room tags in ft-in and sq ft, dimension chains, setback lines, north arrow, scale bar, revision label and an advisory stamp. |
 | `src/catalogue/catalogue.ts` | Starter catalogue in generic Indian sizes: beds, wardrobes, sofas (chaise left/right), dining 4/6/8, oonjal, pooja unit, WCs, basins, appliances, cars and scooters, doors and windows. Each entry has a footprint, the clear space it needs, services and a price band, and a versioned id (`bed.queen@1`) so saved designs never change under you. |
 | `src/model/furnishing.ts` | Placed items: automatic placement clear of walls, door swings, doorways, stairs and other furniture; checks for overlaps, clearances, blocked door swings and doorways, doors that swing into each other, and narrow passages. |
+| `src/model/wetstack.ts` | Wet stacking: toilets, kitchens and utilities over wet rooms below, never a toilet over a bedroom, kitchen, pooja or dining room, and an outside wall for pipes. |
+| `src/rules/vastu.ts` | Opt-in Vastu (`SetPreferences { vastu: "prefer" | "strict" }`): entrance, kitchen, master bedroom, pooja, toilets and stair scored by true-north zone, and the open centre. Advisory only, never blocking; the site plan shows the nine zones when it is on. |
 | `src/output/siteplan.ts` | Site plan at 1:100: trees with canopy and root zones, ground footprint, upper-floor outlines, stairs, column grid and an area statement. |
 | `src/output/sheet.ts`, `src/output/pdf.ts` | A sheet is a display list, so one drawing renders to SVG and to a dependency-free vector PDF. |
 | `src/output/viewer.ts` | The shareable single-file HTML viewer. |
 
 ### Edit operations
 
-`SetPlot`, `SetRoad`, `AddLevel`, `RemoveLevel`, `SetLevelHeight`, `AddRoom`, `RemoveRoom`, `ResizeRoom` (by distance or to a target area), `MoveRoom`, `RenameRoom`, `SetRoomType`, `AddOpening`, `MoveOpening`, `ResizeOpening`, `RemoveOpening`, `AddTree`, `UpdateTree`, `RemoveTree`, `AddColumn`, `MoveColumn`, `RemoveColumn`, `PlaceColumns` (a column at every wall corner and junction, splitting runs longer than the span limit), `AddStair` (sized to fit when no well size is given), `UpdateStair`, `RemoveStair`, `PlaceItem` (finds a spot when no wall is given), `MoveItem`, `SwapItem`, `RemoveItem`.
+`SetPlot`, `SetRoad`, `AddLevel`, `RemoveLevel`, `SetLevelHeight`, `AddRoom`, `RemoveRoom`, `ResizeRoom` (by distance or to a target area), `MoveRoom`, `RenameRoom`, `SetRoomType`, `AddOpening`, `MoveOpening`, `ResizeOpening`, `RemoveOpening`, `AddTree`, `UpdateTree`, `RemoveTree`, `AddColumn`, `MoveColumn`, `RemoveColumn`, `PlaceColumns` (a column at every wall corner and junction, splitting runs longer than the span limit), `AddStair` (sized to fit when no well size is given), `UpdateStair`, `RemoveStair`, `PlaceItem` (finds a spot when no wall is given), `MoveItem`, `SwapItem`, `RemoveItem`, `SetPreferences` (Vastu, span limit, budget, family size).
 
 Every op shares one shape, `{ op, target?, args, reason? }`. A request is one transaction: all ops apply or none do. Each transaction returns a change set (what changed, used for "what did the AI change?") and undo replays it backwards.
 

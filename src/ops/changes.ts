@@ -24,7 +24,10 @@ type ElementChange = { [K in ElementKind]: { kind: K; id: string; before: Elemen
 export type Change =
   | ElementChange
   | { kind: "levels"; id: "levels"; before: Level[]; after: Level[] }
-  | { kind: "plot"; id: "plot"; before: Plot; after: Plot };
+  | { kind: "plot"; id: "plot"; before: Plot; after: Plot }
+  | { kind: "prefs"; id: "prefs"; before: Prefs; after: Prefs };
+
+type Prefs = Project["prefs"];
 
 export type ChangeSet = Change[];
 
@@ -51,6 +54,7 @@ export class Draft {
   };
   private levelsBefore: Level[] | null = null;
   private plotBefore: Plot | null = null;
+  private prefsBefore: Prefs | null = null;
 
   constructor(
     base: Project,
@@ -133,6 +137,11 @@ export class Draft {
     this.project.plot = clone(plot);
   }
 
+  setPrefs(prefs: Prefs): void {
+    if (!this.prefsBefore) this.prefsBefore = clone(this.project.prefs);
+    this.project.prefs = clone(prefs);
+  }
+
   /** Net changes; elements touched but left equal to their start state are dropped. */
   changes(): ChangeSet {
     const out: ChangeSet = [];
@@ -147,6 +156,8 @@ export class Draft {
       out.push({ kind: "levels", id: "levels", before: this.levelsBefore, after: clone(this.project.levels) });
     if (this.plotBefore && !same(this.plotBefore, this.project.plot))
       out.push({ kind: "plot", id: "plot", before: this.plotBefore, after: clone(this.project.plot) });
+    if (this.prefsBefore && !same(this.prefsBefore, this.project.prefs))
+      out.push({ kind: "prefs", id: "prefs", before: this.prefsBefore, after: clone(this.project.prefs) });
     return out;
   }
 }
@@ -169,6 +180,9 @@ export function applyChangeSet(project: Project, changes: ChangeSet, direction: 
         break;
       case "plot":
         p.plot = clone(target as Plot);
+        break;
+      case "prefs":
+        p.prefs = clone(target as Prefs);
         break;
       default: {
         const key = COLLECTION[c.kind];
@@ -203,6 +217,7 @@ export function describeChanges(changes: ChangeSet): string[] {
     };
     if (c.kind === "levels") return "Levels updated";
     if (c.kind === "plot") return "Plot updated";
+    if (c.kind === "prefs") return "Preferences updated";
     if (!c.before) return `Added ${c.kind} ${name(c.after)}`;
     if (!c.after) return `Removed ${c.kind} ${name(c.before)}`;
     return `Changed ${c.kind} ${name(c.after)}`;

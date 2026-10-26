@@ -7,7 +7,8 @@ import { builtUpArea, outerRect, plotArea } from "../model/areas.js";
 import type { Rect } from "../model/geometry.js";
 import type { Project } from "../model/schema.js";
 import { sqmToSqft } from "../model/units.js";
-import { drawStair, drawStructure, drawTree, sheetFrame, SMALL, TEXT } from "./frame.js";
+import { zoneFrame } from "../model/zones.js";
+import { drawStair, drawStructure, drawTree, sheetFrame, SMALL, TEXT, type Frame } from "./frame.js";
 import type { Pt, Sheet } from "./sheet.js";
 
 export function siteplanSheet(project: Project): Sheet {
@@ -27,6 +28,7 @@ export function siteplanSheet(project: Project): Sheet {
   upper.forEach((level, i) => {
     for (const [a, b] of unionOutline(rectsOn(level.id))) items.push({ kind: "line", a: P(a[0], a[1]), b: P(b[0], b[1]), stroke: "#000", sw: 15, dash: [150 + i * 60, 90] });
   });
+  if (project.prefs.vastu !== "off") drawZones(fr, project);
   for (const s of project.stairs.filter((s) => s.fromLevel === lowest?.id)) drawStair(fr, project, s, "UP");
   drawStructure(fr, project, null);
 
@@ -56,6 +58,47 @@ export function siteplanSheet(project: Project): Sheet {
   });
 
   return fr.finish("Site plan", "Trees, setbacks and footprint from the design model. Verify boundaries and trees against a site survey.");
+}
+
+/** The nine Vastu zones by true north: dashed thirds clipped to the plot, with zone names. */
+function drawZones(fr: Frame, project: Project): void {
+  const z = zoneFrame(project);
+  const big = 1e6;
+  const seg = (dir: readonly [number, number], normal: readonly [number, number], reach: number, k: number) => {
+    const c: Pt = [z.centre[0] + normal[0] * reach * k, z.centre[1] + normal[1] * reach * k];
+    const clipped = clipToRect([c[0] - dir[0] * big, c[1] - dir[1] * big], [c[0] + dir[0] * big, c[1] + dir[1] * big], z.plot);
+    if (clipped) fr.items.push({ kind: "line", a: fr.P(...clipped[0]), b: fr.P(...clipped[1]), stroke: "#b07d2b", sw: 15, dash: [250, 120] });
+  };
+  for (const k of [-1 / 3, 1 / 3]) {
+    seg(z.e, z.n, z.reachN, k);
+    seg(z.n, z.e, z.reachE, k);
+  }
+  for (const [name, a, b] of [["N", 1, 0], ["NE", 1, 1], ["E", 0, 1], ["SE", -1, 1], ["S", -1, 0], ["SW", -1, -1], ["W", 0, -1], ["NW", 1, -1], ["C", 0, 0]] as const) {
+    const at: Pt = [z.centre[0] + (z.n[0] * a * z.reachN * 2) / 3 + (z.e[0] * b * z.reachE * 2) / 3, z.centre[1] + (z.n[1] * a * z.reachN * 2) / 3 + (z.e[1] * b * z.reachE * 2) / 3];
+    fr.text(fr.P(at[0], at[1]), name, TEXT * 1.4, { bold: true, fill: "#d9b77a" });
+  }
+}
+
+/** Liang–Barsky clip of a segment to a rectangle. */
+function clipToRect(a: Pt, b: Pt, r: Rect): [Pt, Pt] | null {
+  let t0 = 0;
+  let t1 = 1;
+  const dx = b[0] - a[0];
+  const dy = b[1] - a[1];
+  for (const [p, q] of [[-dx, a[0] - r.x0], [dx, r.x1 - a[0]], [-dy, a[1] - r.y0], [dy, r.y1 - a[1]]] as const) {
+    if (p === 0) {
+      if (q < 0) return null;
+      continue;
+    }
+    const t = q / p;
+    if (p < 0) t0 = Math.max(t0, t);
+    else t1 = Math.min(t1, t);
+    if (t0 > t1) return null;
+  }
+  return [
+    [a[0] + t0 * dx, a[1] + t0 * dy],
+    [a[0] + t1 * dx, a[1] + t1 * dy],
+  ];
 }
 
 /** Outline segments of a union of rectangles: the parts of each edge with nothing on its outer side. */

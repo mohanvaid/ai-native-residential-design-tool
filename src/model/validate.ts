@@ -4,6 +4,7 @@ import { HABITABLE, type Finding, type Project, type RoomType } from "./schema.j
 import { formatArea, formatFtIn } from "./units.js";
 import { validateFurnishing } from "./furnishing.js";
 import { validateStructure } from "./structure.js";
+import { validateWetStack } from "./wetstack.js";
 import { clearRect, deriveWalls, resolveOpening, roomRect, type Wall } from "./walls.js";
 
 const SOURCE = "core";
@@ -120,7 +121,7 @@ export function validateModel(project: Project): Finding[] {
       out.push(f("warn", "room.no_door", `${room.name} has no door.`, [room.id]));
   }
 
-  out.push(...validateStructure(project), ...validateFurnishing(project));
+  out.push(...validateStructure(project), ...validateFurnishing(project), ...validateWetStack(project));
   return out;
 }
 

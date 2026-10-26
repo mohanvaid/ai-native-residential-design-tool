@@ -6,6 +6,7 @@
  */
 import { revisionLabel } from "../agent/report.js";
 import { catalogueItem } from "../catalogue/catalogue.js";
+import { vastuReport } from "../rules/vastu.js";
 import { validate } from "../engine.js";
 import { rectArea, rectDepth, rectWidth } from "../model/geometry.js";
 import type { Finding, Project } from "../model/schema.js";
@@ -57,6 +58,16 @@ function itemRows(project: Project): string {
       return `<tr><td>${escXml(room)}</td><td>${escXml(cat.name)}</td><td>${formatFtIn(cat.width)} × ${formatFtIn(cat.depth)}</td><td class="n">${price}</td></tr>`;
     })
     .join("");
+}
+
+function vastuSection(project: Project): string {
+  if (project.prefs.vastu === "off") return "";
+  const rep = vastuReport(project);
+  const mark = { best: "Preferred", ok: "Acceptable", neutral: "Neutral", avoid: "Avoid" } as const;
+  return `<h2>Vastu (advisory) · ${rep.score} of ${rep.max}</h2>
+    <table><thead><tr><th>Element</th><th>Zone</th><th>Rating</th></tr></thead><tbody>${rep.items
+      .map((i) => `<tr><td>${escXml(i.name)}</td><td>${i.key === "entrance" ? "faces " : ""}${i.zone}</td><td>${mark[i.grade]}</td></tr>`)
+      .join("")}</tbody></table>`;
 }
 
 function findingItems(findings: Finding[]): string {
@@ -149,6 +160,7 @@ ${plans.map((p, i) => `<div class="plan${i === start ? " active" : ""}" data-lev
   <div class="panel">
     <h2>Checks</h2>
     ${findingItems(findings)}
+    ${vastuSection(project)}
     <h2>Rooms (clear sizes)</h2>
     <table><thead><tr><th>Floor</th><th>Room</th><th>Size</th><th class="n">sq ft</th></tr></thead><tbody>${roomRows(project)}</tbody></table>
     <h2>Doors and windows</h2>

@@ -393,6 +393,14 @@ export function applyOp(draft: Draft, op: Op, opIndex: number): void {
       return;
     }
 
+    case "SetPreferences": {
+      const a = op.args;
+      const prefs = { ...draft.project.prefs };
+      for (const [k, v] of Object.entries(a)) if (v !== undefined) (prefs as Record<string, unknown>)[k] = v;
+      draft.setPrefs(prefs);
+      return;
+    }
+
     case "RemoveStair": {
       draft.require("stair", op.target);
       draft.remove("stair", op.target);

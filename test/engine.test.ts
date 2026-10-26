@@ -185,7 +185,7 @@ describe("tool definitions", () => {
   it("exposes every op as a JSON-schema tool", () => {
     const tools = opToolDefinitions();
     expect(tools.map((t) => t.name)).toContain("ResizeRoom");
-    expect(tools).toHaveLength(29);
+    expect(tools).toHaveLength(30);
     expect(JSON.stringify(tools.find((t) => t.name === "AddRoom")!.input_schema)).toContain("depth");
   });
 });
