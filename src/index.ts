@@ -4,6 +4,7 @@ export * from "./model/units.js";
 export * from "./model/walls.js";
 export * from "./model/areas.js";
 export * from "./model/validate.js";
+export * from "./model/structure.js";
 export * from "./ops/definitions.js";
 export { applyChangeSet, describeChanges, OpError, type Change, type ChangeSet } from "./ops/changes.js";
 export * from "./engine.js";
@@ -13,6 +14,7 @@ export { tncdbr2019, buildingHeightMm, fsiArea } from "./rules/packs/tncdbr-2019
 export { TNCDBR_2019 } from "./rules/packs/tncdbr-2019.tables.js";
 export * from "./output/floorplan.js";
 export * from "./output/sheet.js";
+export { siteplanSheet, unionOutline } from "./output/siteplan.js";
 export * from "./output/pdf.js";
 export * from "./output/viewer.js";
 export * from "./output/schedule.js";

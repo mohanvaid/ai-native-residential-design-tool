@@ -43,9 +43,10 @@ export function plotArea(project: Project): number {
   return polygonArea(project.plot.boundary) / 1e6;
 }
 
-/** Outer extent of the building across all levels, or null if there are no rooms. */
+/** Outer extent of the building across all levels, enclosed stairs included, or null if there are no rooms. */
 export function buildingExtent(project: Project): Rect | null {
-  const rects = project.rooms.map(outerRect).filter((r): r is Rect => r !== null);
+  const stairs = project.stairs.filter((s) => !s.external).map((s) => boundaryToRect(s.boundary));
+  const rects = [...project.rooms.map(outerRect), ...stairs].filter((r): r is Rect => r !== null);
   if (!rects.length) return null;
   return bbox(rects.flatMap((r) => [[r.x0, r.y0] as [number, number], [r.x1, r.y1] as [number, number]]));
 }

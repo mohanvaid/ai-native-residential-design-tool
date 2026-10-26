@@ -4,23 +4,17 @@
  * drawing renders to SVG and PDF. Room sizes are clear (wall face to wall
  * face) in ft-in, areas in sq ft and m², as Chennai clients read them.
  */
-import { revisionLabel } from "../agent/report.js";
-import { buildingExtent } from "../model/areas.js";
-import { bbox, boundaryToRect, OUTWARD, rectArea, rectDepth, rectWidth, type Rect } from "../model/geometry.js";
-import type { Project, RoomType, Side } from "../model/schema.js";
-import { formatFtIn, formatMetres, sqmToSqft } from "../model/units.js";
+import { boundaryToRect, OUTWARD, rectArea, rectDepth, rectWidth, type Rect } from "../model/geometry.js";
+import type { Project, RoomType } from "../model/schema.js";
+import { formatFtIn, sqmToSqft } from "../model/units.js";
 import { clearRect, deriveWalls, resolveOpening, type ResolvedOpening, type Wall } from "../model/walls.js";
-import { rulePacksFor } from "../rules/registry.js";
-import { marksById } from "./schedule.js";
+import { drawStair, drawStructure, drawTree, sheetFrame, SMALL, TEXT } from "./frame.js";
 import { sheetsToPdf, type Paper } from "./pdf.js";
+import { marksById } from "./schedule.js";
 import { sheetToSvg, type Item, type Pt, type Sheet } from "./sheet.js";
+import { siteplanSheet } from "./siteplan.js";
 
-const MARGIN = 3200;
-const ROAD_DEPTH = 1200;
-const TEXT = 220;
-const SMALL = 170;
-
-export const ADVISORY_STAMP = "ADVISORY · NOT FOR CONSTRUCTION OR APPROVAL";
+export { ADVISORY_STAMP } from "./frame.js";
 
 const ROOM_FILL: Partial<Record<RoomType, string>> = {
   living: "#f6efe2",
@@ -43,16 +37,9 @@ export interface FloorPlanOptions {
 export function floorPlanSheet(project: Project, levelId: string, opts: FloorPlanOptions = {}): Sheet {
   const level = project.levels.find((l) => l.id === levelId);
   if (!level) throw new Error(`No level ${levelId}`);
-  const plot = bbox(project.plot.boundary);
-  const ox = plot.x0 - MARGIN;
-  const oy = plot.y1 + MARGIN;
-  const W = rectWidth(plot) + 2 * MARGIN;
-  const H = rectDepth(plot) + 2 * MARGIN;
-  const X = (x: number) => x - ox;
-  const Y = (y: number) => oy - y;
-  const P = (x: number, y: number): Pt => [X(x), Y(y)];
-  /** A model rectangle as a sheet rectangle item. */
-  const box = (r: Rect) => ({ x: X(r.x0), y: Y(r.y1), w: rectWidth(r), h: rectDepth(r) });
+  const fr = sheetFrame(project, opts);
+  const { items, plot, X, Y, P, box, text } = fr;
+  const levelIdx = project.levels.findIndex((l) => l.id === levelId);
 
   const rooms = project.rooms.filter((r) => r.level === levelId && boundaryToRect(r.boundary));
   const walls = deriveWalls(project, levelId);
@@ -61,37 +48,9 @@ export function floorPlanSheet(project: Project, levelId: string, opts: FloorPla
     .map((o) => resolveOpening(project, walls, o))
     .filter((r): r is ResolvedOpening => r !== null);
   const marks = marksById(project);
-  const items: Item[] = [];
-  const text = (at: Pt, s: string, size: number, o: { rotate?: number; bold?: boolean; fill?: string } = {}) =>
-    items.push({ kind: "text", at, text: s, size, ...o });
 
-  // Roads
-  for (const road of project.plot.abuttingRoads) {
-    const r = outside(plot, road.side, ROAD_DEPTH);
-    items.push({ kind: "rect", ...box(r), fill: "#e4e4e4" });
-    const label = `ROAD ${road.widthM} m (${formatFtIn(road.widthM * 1000)})${road.name ? ` · ${road.name}` : ""}`;
-    text(P((r.x0 + r.x1) / 2, (r.y0 + r.y1) / 2), label, TEXT, { rotate: road.side === "east" || road.side === "west" ? -90 : 0, bold: true, fill: "#555" });
-  }
-
-  // Plot boundary
-  items.push({ kind: "poly", pts: project.plot.boundary.map(([x, y]) => P(x, y)), closed: true, stroke: "#000", sw: 40, dash: [400, 120, 80, 120] });
-
-  // Setback line and provided setbacks
-  const pack = opts.showSetbacks === false ? undefined : rulePacksFor(project)[0];
-  const env = pack?.derive(project);
-  const extent = buildingExtent(project);
-  if (env && env.setbacks.length) {
-    items.push({ kind: "rect", ...box(env.buildable), stroke: "#c0392b", sw: 25, dash: [200, 100] });
-    if (extent) {
-      for (const s of env.setbacks) {
-        const provided = distanceTo(plot, extent, s.side);
-        const gap = outside(extent, s.side, provided);
-        const req = s.requiredMm === null ? "req. ?" : `req. ${formatMetres(s.requiredMm)}${s.applies === "one_of_sides" ? " one side" : ""}`;
-        const vertical = s.side === "east" || s.side === "west";
-        text(P((gap.x0 + gap.x1) / 2, (gap.y0 + gap.y1) / 2), `${cap(s.role)} ${formatMetres(provided)} (${req})`, SMALL, { rotate: vertical ? -90 : 0, fill: "#c0392b" });
-      }
-    }
-  }
+  // Trees: full zones on the lowest level, canopies above
+  for (const t of project.trees) drawTree(fr, t, { zones: levelIdx === 0 });
 
   // Room fills
   for (const room of rooms) items.push({ kind: "rect", ...box(clearRect(walls, room)), fill: ROOM_FILL[room.type] ?? "#f4f4f4" });
@@ -143,10 +102,21 @@ export function floorPlanSheet(project: Project, levelId: string, opts: FloorPla
     }
   }
 
+  // Stairs: going up from this level, and the well of the one arriving here
+  for (const st of project.stairs) {
+    if (st.fromLevel === levelId) drawStair(fr, project, st, "UP");
+    else if (st.toLevel === levelId) drawStair(fr, project, st, "DN");
+  }
+
+  // Columns and grid
+  drawStructure(fr, project, levelId);
+
   // Room tags
+  const wells = project.stairs.filter((st) => st.fromLevel === levelId || st.toLevel === levelId).map((st) => boundaryToRect(st.boundary)).filter((r): r is Rect => r !== null);
   for (const room of rooms) {
     const c = clearRect(walls, room);
-    const [cx, cy] = P((c.x0 + c.x1) / 2, (c.y0 + c.y1) / 2);
+    const t = tagSpot(c, wells);
+    const [cx, cy] = P((t.x0 + t.x1) / 2, (t.y0 + t.y1) / 2);
     const sqm = rectArea(c) / 1e6;
     text([cx, cy - TEXT * 1.1], room.name.toUpperCase(), TEXT, { bold: true });
     text([cx, cy + TEXT * 0.1], `${formatFtIn(rectWidth(c))} × ${formatFtIn(rectDepth(c))}`, SMALL);
@@ -166,35 +136,7 @@ export function floorPlanSheet(project: Project, levelId: string, opts: FloorPla
     dimension(items, P(xChain - 450, ys[0]!), P(xChain - 450, ys[ys.length - 1]!), formatFtIn(ys[ys.length - 1]! - ys[0]!));
   }
 
-  // Plot size
-  text([X((plot.x0 + plot.x1) / 2), Y(plot.y1) - ROAD_DEPTH - 500], `PLOT ${formatFtIn(rectWidth(plot))} × ${formatFtIn(rectDepth(plot))}`, SMALL, { fill: "#555" });
-
-  // North arrow, rotated so it points to true north
-  const nc: Pt = [W - 900, 900];
-  const a = (project.plot.northAngle * Math.PI) / 180;
-  const rot = ([x, y]: Pt): Pt => [nc[0] + x * Math.cos(a) - y * Math.sin(a), nc[1] + x * Math.sin(a) + y * Math.cos(a)];
-  items.push({ kind: "circle", c: nc, r: 420, stroke: "#000", sw: 20 });
-  items.push({ kind: "poly", pts: ([[0, -380], [160, 250], [0, 140], [-160, 250]] as Pt[]).map(rot), closed: true, fill: "#000" });
-  text([nc[0], nc[1] + 650], "N", TEXT, { bold: true });
-
-  // Scale bar: 5 m in 1 m steps
-  const sb: Pt = [600, H - 1050];
-  for (let i = 0; i < 5; i++) items.push({ kind: "rect", x: sb[0] + i * 1000, y: sb[1], w: 1000, h: 90, fill: i % 2 ? "#ffffff" : "#000000", stroke: "#000", sw: 10 });
-  for (let i = 0; i <= 5; i++) text([sb[0] + i * 1000, sb[1] + 230], `${i}`, SMALL - 20);
-  text([sb[0] + 5000 + 300, sb[1] + 230], "m", SMALL - 20);
-
-  // Advisory stamp
-  const stamp: Pt = [W - 600 - 4300, H - 1150];
-  items.push({ kind: "rect", x: stamp[0], y: stamp[1], w: 4300, h: 300, stroke: "#c0392b", sw: 20 });
-  text([stamp[0] + 2150, stamp[1] + 150], ADVISORY_STAMP, SMALL - 30, { bold: true, fill: "#c0392b" });
-
-  // Title block
-  const rev = revisionLabel(project.version);
-  const title = `${project.name} · ${level.name} floor plan · Scale 1:100 · Rev ${rev}`;
-  text([W / 2, H - 450], title, TEXT, { bold: true });
-  text([W / 2, H - 180], "Room sizes are clear internal dimensions; areas are carpet. Not for construction until signed off by a registered professional.", SMALL - 20, { fill: "#555" });
-
-  return { title, width: W, height: H, scale: 100, items };
+  return fr.finish(`${level.name} floor plan`, "Room sizes are clear internal dimensions; areas are carpet. Not for construction until signed off by a registered professional.");
 }
 
 /** The floor plan as SVG sized to print at 1:100. */
@@ -202,22 +144,17 @@ export function renderFloorPlanSvg(project: Project, levelId: string, opts: Floo
   return sheetToSvg(floorPlanSheet(project, levelId, opts));
 }
 
-/** A band of the given depth outside one side of a rectangle. */
-function outside(r: Rect, side: Side, depth: number): Rect {
-  switch (side) {
-    case "north":
-      return { x0: r.x0, x1: r.x1, y0: r.y1, y1: r.y1 + depth };
-    case "south":
-      return { x0: r.x0, x1: r.x1, y0: r.y0 - depth, y1: r.y0 };
-    case "east":
-      return { x0: r.x1, x1: r.x1 + depth, y0: r.y0, y1: r.y1 };
-    case "west":
-      return { x0: r.x0 - depth, x1: r.x0, y0: r.y0, y1: r.y1 };
-  }
-}
-
-function distanceTo(plot: Rect, inner: Rect, side: Side): number {
-  return { north: plot.y1 - inner.y1, south: inner.y0 - plot.y0, east: plot.x1 - inner.x1, west: inner.x0 - plot.x0 }[side];
+/** Where to put a room's tag: the room, or the largest strip of it left beside a stair well. */
+function tagSpot(room: Rect, wells: Rect[]): Rect {
+  const well = wells.find((w) => w.x0 < room.x1 && w.x1 > room.x0 && w.y0 < room.y1 && w.y1 > room.y0);
+  if (!well) return room;
+  const strips: Rect[] = [
+    { ...room, x1: Math.max(room.x0, well.x0) },
+    { ...room, x0: Math.min(room.x1, well.x1) },
+    { ...room, y1: Math.max(room.y0, well.y0) },
+    { ...room, y0: Math.min(room.y1, well.y1) },
+  ];
+  return strips.sort((a, b) => rectArea(b) - rectArea(a))[0]!;
 }
 
 function wallRect(w: Wall, a: number, b: number): Rect {
@@ -249,9 +186,13 @@ function dimension(items: Item[], a: Pt, b: Pt, label: string): void {
 }
 
 const uniq = (ns: number[]) => [...new Set(ns)].sort((a, b) => a - b);
-const cap = (s: string) => s[0]!.toUpperCase() + s.slice(1);
 
-/** All levels of the project as one PDF, one page per level, each at 1:100 where the paper allows. */
+/** Every plan sheet in order: the site plan, then one floor plan per level. */
+export function planSheets(project: Project, opts: FloorPlanOptions = {}): Sheet[] {
+  return [siteplanSheet(project), ...project.levels.map((l) => floorPlanSheet(project, l.id, opts))];
+}
+
+/** The site plan and every floor plan as one PDF, each page at 1:100 where the paper allows. */
 export function renderFloorPlanPdf(project: Project, opts: FloorPlanOptions & { paper?: Paper } = {}): Uint8Array {
-  return sheetsToPdf(project.levels.map((l) => floorPlanSheet(project, l.id, opts)), { paper: opts.paper });
+  return sheetsToPdf(planSheets(project, opts), { paper: opts.paper });
 }

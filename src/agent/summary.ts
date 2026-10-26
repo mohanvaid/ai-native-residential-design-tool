@@ -10,6 +10,7 @@ import { formatFtIn } from "../model/units.js";
 import { clearRect, deriveWalls, resolveOpening, wallsOnSide, type Wall } from "../model/walls.js";
 import { marksById } from "../output/schedule.js";
 import { rulePacksFor } from "../rules/registry.js";
+import { gridRef, stairLayout, structuralGrid } from "../model/structure.js";
 import { validate } from "../engine.js";
 import { revisionLabel } from "./report.js";
 
@@ -70,6 +71,27 @@ export function modelSummary(project: Project): string {
         );
       }
     }
+  }
+
+  if (project.trees.length) {
+    lines.push("", "Trees (trunk centre in mm; radii in mm):");
+    for (const t of project.trees)
+      lines.push(`- ${t.id} ${t.species} at (${t.at[0]}, ${t.at[1]}), canopy ${t.canopyRadius}, root zone ${t.rootRadius}, ${t.keep ? "keep" : "to remove"}`);
+  }
+  if (project.stairs.length) {
+    lines.push("", "Stairs (well rectangle in mm):");
+    for (const st of project.stairs) {
+      const r = boundaryToRect(st.boundary);
+      const lay = stairLayout(project, st);
+      const where = r ? `x ${r.x0}–${r.x1}, y ${r.y0}–${r.y1}` : "not a rectangle";
+      const name = (id: string) => project.levels.find((l) => l.id === id)?.name ?? id;
+      lines.push(`- ${st.id} ${st.shape}${st.external ? " open/external" : ""} from ${name(st.fromLevel)} to ${name(st.toLevel)}, ${where}, starts going ${st.up}${st.shape === "dog-leg" ? `, turns ${st.turn}` : ""}${lay ? `, ${lay.risers} risers of ${Math.round(lay.riserHeight)} mm, ${st.tread} mm treads, flights ${Math.round(lay.flightWidth)} mm wide` : ""}`);
+    }
+  }
+  if (project.columns.length) {
+    const grid = structuralGrid(project);
+    lines.push("", `Columns: ${project.columns.length}, max beam span ${project.prefs.maxSpanMm} mm. Grid ${grid.x.map((g) => `${g.label}=${g.at}`).join(" ")} (x), ${grid.y.map((g) => `${g.label}=${g.at}`).join(" ")} (y).`);
+    for (const c of project.columns) lines.push(`- ${c.id} ${gridRef(project, c, grid)} ${c.width}×${c.depth} at (${c.at[0]}, ${c.at[1]}), ${c.fromLevel}–${c.toLevel}`);
   }
 
   const issues = validate(project).filter((f) => f.severity !== "info");

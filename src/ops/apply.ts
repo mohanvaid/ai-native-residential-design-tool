@@ -1,4 +1,5 @@
 import {
+  boundaryToRect,
   OPPOSITE,
   OUTWARD,
   isHorizontal,
@@ -11,8 +12,9 @@ import {
   translateRect,
   type Rect,
 } from "../model/geometry.js";
-import { Level, Opening, Room, type OpeningType, type Side } from "../model/schema.js";
-import { roomRect } from "../model/walls.js";
+import { Column, Level, Opening, Room, Stair, Tree, type OpeningType, type Side } from "../model/schema.js";
+import { DEFAULT_MAX_RISER_MM, levelIndex, proposeColumns, stairWellRect, stairWellSize, TREE_DEFAULTS, TREE_FALLBACK } from "../model/structure.js";
+import { deriveWalls, roomRect } from "../model/walls.js";
 import { zoneOf } from "../model/zones.js";
 import { Draft, OpError } from "./changes.js";
 import type { Op } from "./definitions.js";
@@ -75,7 +77,15 @@ export function applyOp(draft: Draft, op: Op, opIndex: number): void {
           `Level still has ${rooms.length} room(s): ${rooms.map((r) => r.name).join(", ")}. Remove them first.`,
           "level.not_empty",
         );
-      draft.setLevels(draft.project.levels.filter((l) => l.id !== op.target));
+      const levels = draft.project.levels;
+      const i = levels.findIndex((l) => l.id === op.target);
+      for (const st of draft.project.stairs.filter((st) => st.fromLevel === op.target || st.toLevel === op.target)) draft.remove("stair", st.id);
+      for (const c of [...draft.project.columns]) {
+        if (c.fromLevel === op.target && c.toLevel === op.target) draft.remove("column", c.id);
+        else if (c.fromLevel === op.target) draft.put("column", { ...c, fromLevel: levels[i + 1]!.id });
+        else if (c.toLevel === op.target) draft.put("column", { ...c, toLevel: levels[i - 1]!.id });
+      }
+      draft.setLevels(levels.filter((l) => l.id !== op.target));
       return;
     }
 
@@ -211,7 +221,140 @@ export function applyOp(draft: Draft, op: Op, opIndex: number): void {
       draft.removeOpening(op.target);
       return;
     }
+
+    case "AddTree": {
+      const a = op.args;
+      const id = a.id ?? draft.nextId("tr");
+      if (draft.get("tree", id)) throw new OpError(`Tree id "${id}" already exists.`, "tree.duplicate");
+      const d = TREE_DEFAULTS[a.species.toLowerCase()] ?? TREE_FALLBACK;
+      draft.put("tree", Tree.parse({ id, species: a.species, at: [a.x, a.y], canopyRadius: a.canopyRadius ?? d.canopy, rootRadius: a.rootRadius ?? d.root, keep: a.keep, meta }));
+      return;
+    }
+
+    case "UpdateTree": {
+      const t = draft.require("tree", op.target);
+      const a = op.args;
+      draft.put("tree", {
+        ...t,
+        at: [a.x ?? t.at[0], a.y ?? t.at[1]],
+        canopyRadius: a.canopyRadius ?? t.canopyRadius,
+        rootRadius: a.rootRadius ?? t.rootRadius,
+        keep: a.keep ?? t.keep,
+      });
+      return;
+    }
+
+    case "RemoveTree": {
+      draft.require("tree", op.target);
+      draft.remove("tree", op.target);
+      return;
+    }
+
+    case "AddColumn": {
+      const a = op.args;
+      draft.requireLevel(a.fromLevel);
+      const toLevel = a.toLevel ?? topLevel(draft);
+      draft.requireLevel(toLevel);
+      const id = a.id ?? draft.nextId("col");
+      if (draft.get("column", id)) throw new OpError(`Column id "${id}" already exists.`, "column.duplicate");
+      draft.put("column", Column.parse({ id, at: [a.x, a.y], width: a.width ?? COLUMN_DEFAULT.width, depth: a.depth ?? COLUMN_DEFAULT.depth, fromLevel: a.fromLevel, toLevel, meta }));
+      return;
+    }
+
+    case "MoveColumn": {
+      const c = draft.require("column", op.target);
+      draft.put("column", { ...c, at: [c.at[0] + op.args.dx, c.at[1] + op.args.dy] });
+      return;
+    }
+
+    case "RemoveColumn": {
+      draft.require("column", op.target);
+      draft.remove("column", op.target);
+      return;
+    }
+
+    case "PlaceColumns": {
+      const a = op.args;
+      const p = draft.project;
+      const fromLevel = a.fromLevel ?? p.levels[0]!.id;
+      const toLevel = a.toLevel ?? topLevel(draft);
+      draft.requireLevel(fromLevel);
+      draft.requireLevel(toLevel);
+      const [i0, i1] = [levelIndex(p, fromLevel), levelIndex(p, toLevel)];
+      if (i0 > i1) throw new OpError("fromLevel is above toLevel.", "column.levels_reversed");
+      const ids = p.levels.slice(i0, i1 + 1).map((l) => l.id);
+      const pts = proposeColumns(p, ids, a.maxSpan ?? p.prefs.maxSpanMm);
+      if (!pts.length) throw new OpError("There are no walls on those levels to place columns on.", "column.no_walls");
+      for (const c of p.columns.filter((c) => levelIndex(p, c.fromLevel) >= i0 && levelIndex(p, c.toLevel) <= i1)) draft.remove("column", c.id);
+      // Each column rises to the highest level in the range that has a wall on it, so it stops under open terraces.
+      const wallsAt = ids.map((id) => deriveWalls(p, id));
+      for (const at of pts) {
+        let top = 0;
+        wallsAt.forEach((walls, i) => {
+          if (walls.some((w) => (w.orient === "h" ? Math.abs(at[1] - w.at) <= 50 && at[0] >= w.from - 50 && at[0] <= w.to + 50 : Math.abs(at[0] - w.at) <= 50 && at[1] >= w.from - 50 && at[1] <= w.to + 50))) top = i;
+        });
+        draft.put("column", Column.parse({ id: draft.nextId("col"), at, width: a.width ?? COLUMN_DEFAULT.width, depth: a.depth ?? COLUMN_DEFAULT.depth, fromLevel, toLevel: ids[top]!, meta }));
+      }
+      return;
+    }
+
+    case "AddStair": {
+      const a = op.args;
+      const from = draft.requireLevel(a.fromLevel);
+      const i = levelIndex(draft.project, a.fromLevel);
+      const toLevel = a.toLevel ?? draft.project.levels[i + 1]?.id;
+      if (!toLevel) throw new OpError(`There is no level above ${from.name} for the stair to reach. Add the level first.`, "stair.no_level_above");
+      draft.requireLevel(toLevel);
+      const id = a.id ?? draft.nextId("st");
+      if (draft.get("stair", id)) throw new OpError(`Stair id "${id}" already exists.`, "stair.duplicate");
+      const risers = a.risers ?? Math.ceil(from.floorToFloor / DEFAULT_MAX_RISER_MM);
+      const size = stairWellSize(a.shape, risers, a.tread, a.flightWidth);
+      const fitted = stairWellRect(a.x, a.y, a.up, size);
+      const well = { x0: a.x, y0: a.y, x1: a.x + (a.width ?? fitted.x1 - fitted.x0), y1: a.y + (a.depth ?? fitted.y1 - fitted.y0) };
+      draft.put(
+        "stair",
+        Stair.parse({ id, fromLevel: a.fromLevel, toLevel, boundary: rectToBoundary(well), shape: a.shape, up: a.up, turn: a.turn, risers: a.risers, tread: a.tread, external: a.external, meta }),
+      );
+      return;
+    }
+
+    case "UpdateStair": {
+      const s = draft.require("stair", op.target);
+      const a = op.args;
+      const r = boundaryToRect(s.boundary);
+      if (!r) throw new OpError("The stair is not a rectangle.", "stair.not_rectangle");
+      const x0 = r.x0 + (a.dx ?? 0);
+      const y0 = r.y0 + (a.dy ?? 0);
+      const well = { x0, y0, x1: x0 + (a.width ?? rectWidth(r)), y1: y0 + (a.depth ?? rectDepth(r)) };
+      draft.put("stair", {
+        ...s,
+        boundary: rectToBoundary(well),
+        up: a.up ?? s.up,
+        shape: a.shape ?? s.shape,
+        turn: a.turn ?? s.turn,
+        tread: a.tread ?? s.tread,
+        ...(a.risers !== undefined ? { risers: a.risers } : {}),
+        external: a.external ?? s.external,
+      });
+      return;
+    }
+
+    case "RemoveStair": {
+      draft.require("stair", op.target);
+      draft.remove("stair", op.target);
+      return;
+    }
   }
+}
+
+/** 9" × 12", the usual column for a G+2 house frame. */
+export const COLUMN_DEFAULT = { width: 230, depth: 300 };
+
+/** The highest level that has rooms, or the lowest level if none do. */
+function topLevel(draft: Draft): string {
+  const p = draft.project;
+  const withRooms = p.levels.filter((l) => l.kind !== "terrace" && p.rooms.some((r) => r.level === l.id));
+  return (withRooms[withRooms.length - 1] ?? p.levels[0]!).id;
 }
 
 /**

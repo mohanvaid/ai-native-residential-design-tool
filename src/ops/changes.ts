@@ -3,11 +3,24 @@
  * element it touches, so a transaction yields a ChangeSet: the diff for
  * "what did the AI change?" and, reversed, the undo.
  */
-import type { Level, Opening, Plot, Project, Room } from "../model/schema.js";
+import type { Column, Level, Opening, Plot, Project, Room, Stair, Tree } from "../model/schema.js";
+
+/** Element collections on the project, by change kind. */
+interface Elements {
+  room: Room;
+  opening: Opening;
+  tree: Tree;
+  column: Column;
+  stair: Stair;
+}
+export type ElementKind = keyof Elements;
+const COLLECTION = { room: "rooms", opening: "openings", tree: "trees", column: "columns", stair: "stairs" } as const satisfies Record<ElementKind, keyof Project>;
+const ELEMENT_KINDS = Object.keys(COLLECTION) as ElementKind[];
+
+type ElementChange = { [K in ElementKind]: { kind: K; id: string; before: Elements[K] | null; after: Elements[K] | null } }[ElementKind];
 
 export type Change =
-  | { kind: "room"; id: string; before: Room | null; after: Room | null }
-  | { kind: "opening"; id: string; before: Opening | null; after: Opening | null }
+  | ElementChange
   | { kind: "levels"; id: "levels"; before: Level[]; after: Level[] }
   | { kind: "plot"; id: "plot"; before: Plot; after: Plot };
 
@@ -26,8 +39,13 @@ export class OpError extends Error {
 
 export class Draft {
   readonly project: Project;
-  private readonly roomsBefore = new Map<string, Room | null>();
-  private readonly openingsBefore = new Map<string, Opening | null>();
+  private readonly before: { [K in ElementKind]: Map<string, Elements[K] | null> } = {
+    room: new Map(),
+    opening: new Map(),
+    tree: new Map(),
+    column: new Map(),
+    stair: new Map(),
+  };
   private levelsBefore: Level[] | null = null;
   private plotBefore: Plot | null = null;
 
@@ -44,60 +62,49 @@ export class Draft {
     return `${prefix}_${this.project.seq}`;
   }
 
-  // Rooms
+  // Elements (rooms, openings, trees, columns, stairs)
 
-  room(id: string): Room | undefined {
-    return this.project.rooms.find((r) => r.id === id);
+  private list<K extends ElementKind>(kind: K): Elements[K][] {
+    return this.project[COLLECTION[kind]] as Elements[K][];
   }
 
-  requireRoom(id: string): Room {
-    const r = this.room(id);
-    if (!r) throw new OpError(`No room with id "${id}".`, "room.missing");
-    return r;
+  get<K extends ElementKind>(kind: K, id: string): Elements[K] | undefined {
+    return this.list(kind).find((e) => e.id === id);
   }
 
-  putRoom(room: Room): void {
-    const i = this.project.rooms.findIndex((r) => r.id === room.id);
-    if (!this.roomsBefore.has(room.id)) this.roomsBefore.set(room.id, i >= 0 ? clone(this.project.rooms[i]!) : null);
-    const next = { ...clone(room), meta: { ...room.meta, lastChangedVersion: this.version } };
-    if (i >= 0) this.project.rooms[i] = next;
-    else this.project.rooms.push(next);
+  require<K extends ElementKind>(kind: K, id: string): Elements[K] {
+    const e = this.get(kind, id);
+    if (!e) throw new OpError(`No ${kind} with id "${id}".`, `${kind}.missing`);
+    return e;
   }
 
-  removeRoom(id: string): void {
-    const i = this.project.rooms.findIndex((r) => r.id === id);
+  put<K extends ElementKind>(kind: K, el: Elements[K]): void {
+    const list = this.list(kind);
+    const before = this.before[kind] as Map<string, Elements[K] | null>;
+    const i = list.findIndex((e) => e.id === el.id);
+    if (!before.has(el.id)) before.set(el.id, i >= 0 ? clone(list[i]!) : null);
+    const next = { ...clone(el), meta: { ...el.meta, lastChangedVersion: this.version } };
+    if (i >= 0) list[i] = next;
+    else list.push(next);
+  }
+
+  remove(kind: ElementKind, id: string): void {
+    const list = this.list(kind);
+    const i = list.findIndex((e) => e.id === id);
     if (i < 0) return;
-    if (!this.roomsBefore.has(id)) this.roomsBefore.set(id, clone(this.project.rooms[i]!));
-    this.project.rooms.splice(i, 1);
+    const before = this.before[kind] as Map<string, unknown>;
+    if (!before.has(id)) before.set(id, clone(list[i]!));
+    list.splice(i, 1);
   }
 
-  // Openings
-
-  opening(id: string): Opening | undefined {
-    return this.project.openings.find((o) => o.id === id);
-  }
-
-  requireOpening(id: string): Opening {
-    const o = this.opening(id);
-    if (!o) throw new OpError(`No opening with id "${id}".`, "opening.missing");
-    return o;
-  }
-
-  putOpening(opening: Opening): void {
-    const i = this.project.openings.findIndex((o) => o.id === opening.id);
-    if (!this.openingsBefore.has(opening.id))
-      this.openingsBefore.set(opening.id, i >= 0 ? clone(this.project.openings[i]!) : null);
-    const next = { ...clone(opening), meta: { ...opening.meta, lastChangedVersion: this.version } };
-    if (i >= 0) this.project.openings[i] = next;
-    else this.project.openings.push(next);
-  }
-
-  removeOpening(id: string): void {
-    const i = this.project.openings.findIndex((o) => o.id === id);
-    if (i < 0) return;
-    if (!this.openingsBefore.has(id)) this.openingsBefore.set(id, clone(this.project.openings[i]!));
-    this.project.openings.splice(i, 1);
-  }
+  room = (id: string) => this.get("room", id);
+  requireRoom = (id: string) => this.require("room", id);
+  putRoom = (room: Room) => this.put("room", room);
+  removeRoom = (id: string) => this.remove("room", id);
+  opening = (id: string) => this.get("opening", id);
+  requireOpening = (id: string) => this.require("opening", id);
+  putOpening = (opening: Opening) => this.put("opening", opening);
+  removeOpening = (id: string) => this.remove("opening", id);
 
   // Levels (tracked as one ordered list, since order is the vertical stack)
 
@@ -127,13 +134,11 @@ export class Draft {
   changes(): ChangeSet {
     const out: ChangeSet = [];
     const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
-    for (const [id, before] of this.roomsBefore) {
-      const after = this.room(id) ?? null;
-      if (!same(stripMeta(before), stripMeta(after))) out.push({ kind: "room", id, before, after: clone(after) });
-    }
-    for (const [id, before] of this.openingsBefore) {
-      const after = this.opening(id) ?? null;
-      if (!same(stripMeta(before), stripMeta(after))) out.push({ kind: "opening", id, before, after: clone(after) });
+    for (const kind of ELEMENT_KINDS) {
+      for (const [id, before] of this.before[kind] as Map<string, { meta?: unknown } | null>) {
+        const after = this.get(kind, id) ?? null;
+        if (!same(stripMeta(before), stripMeta(after))) out.push({ kind, id, before, after: clone(after) } as ElementChange);
+      }
     }
     if (this.levelsBefore && !same(this.levelsBefore.map(stripMeta), this.project.levels.map(stripMeta)))
       out.push({ kind: "levels", id: "levels", before: this.levelsBefore, after: clone(this.project.levels) });
@@ -156,18 +161,16 @@ export function applyChangeSet(project: Project, changes: ChangeSet, direction: 
   for (const c of list) {
     const target = direction === "forward" ? c.after : c.before;
     switch (c.kind) {
-      case "room":
-        p.rooms = upsert(p.rooms, c.id, target as Room | null);
-        break;
-      case "opening":
-        p.openings = upsert(p.openings, c.id, target as Opening | null);
-        break;
       case "levels":
         p.levels = clone(target as Level[]);
         break;
       case "plot":
         p.plot = clone(target as Plot);
         break;
+      default: {
+        const key = COLLECTION[c.kind];
+        (p as Record<string, unknown>)[key] = upsert(p[key] as { id: string }[], c.id, target as { id: string } | null);
+      }
     }
   }
   return p;
@@ -183,14 +186,24 @@ function upsert<T extends { id: string }>(list: T[], id: string, target: T | nul
   return next;
 }
 
-/** One-line descriptions of a ChangeSet, for the chat reply. */
+/** One-line descriptions of a ChangeSet, for the chat reply. Bulk column changes collapse to one line. */
 export function describeChanges(changes: ChangeSet): string[] {
-  return changes.map((c) => {
-    const name = (v: unknown) => (v && typeof v === "object" && "name" in v ? String(v.name) : c.id);
+  const columns = changes.filter((c) => c.kind === "column");
+  const bulk = columns.length > 3;
+  const lines = changes.filter((c) => !(bulk && c.kind === "column")).map((c) => {
+    const name = (v: unknown) =>
+      v && typeof v === "object" && "name" in v ? String(v.name) : v && typeof v === "object" && "species" in v ? String(v.species) : c.id;
     if (c.kind === "levels") return "Levels updated";
     if (c.kind === "plot") return "Plot updated";
     if (!c.before) return `Added ${c.kind} ${name(c.after)}`;
     if (!c.after) return `Removed ${c.kind} ${name(c.before)}`;
     return `Changed ${c.kind} ${name(c.after)}`;
   });
+  if (bulk) {
+    const added = columns.filter((c) => !c.before).length;
+    const removed = columns.filter((c) => !c.after).length;
+    const changed = columns.length - added - removed;
+    lines.push(`Columns: ${[added && `${added} added`, removed && `${removed} removed`, changed && `${changed} changed`].filter(Boolean).join(", ")}`);
+  }
+  return lines;
 }

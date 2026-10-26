@@ -4,7 +4,8 @@
  * ./tncdbr-2019.tables.ts.
  */
 import { buildingExtent, builtUpArea, plotArea } from "../../model/areas.js";
-import { bbox, OPPOSITE, sideLength, type Rect } from "../../model/geometry.js";
+import { bbox, contains, OPPOSITE, sideLength, type Rect } from "../../model/geometry.js";
+import { stairLayout } from "../../model/structure.js";
 import type { Finding, Project, Side } from "../../model/schema.js";
 import { formatMetres } from "../../model/units.js";
 import type { Cell, Check, Envelope, RulePack, SetbackRequirement } from "../types.js";
@@ -251,10 +252,55 @@ const coverageCheck: Check = {
 
 const cap = (s: string) => s[0]!.toUpperCase() + s.slice(1);
 
+const stairCheck: Check = {
+  id: "tn.stairs",
+  title: "Stairways",
+  run(project, env) {
+    const out: Finding[] = [];
+    const S = T.stairs;
+    const plot = bbox(project.plot.boundary);
+    const roles = setbackRoles(project);
+    for (const stair of project.stairs) {
+      const lay = stairLayout(project, stair);
+      if (!lay) continue;
+      const name = `The stair from ${project.levels.find((l) => l.id === stair.fromLevel)?.name ?? stair.fromLevel}`;
+      if (lay.flightWidth < S.minWidthM.value! * 1000)
+        out.push(f("block", "tn.stair.width", `${name} has ${formatMetres(lay.flightWidth)} wide flights; ${S.minWidthM.cite} needs ${formatMetres(S.minWidthM.value! * 1000)}.`, [stair.id]));
+      if (stair.tread < S.minTreadMm.value!)
+        out.push(f("block", "tn.stair.tread", `${name} has ${stair.tread} mm treads; ${S.minTreadMm.cite} needs at least ${S.minTreadMm.value} mm.`, [stair.id]));
+      if (lay.riserHeight > S.maxRiserMm.value! + 0.5)
+        out.push(f("block", "tn.stair.riser", `${name} has ${Math.round(lay.riserHeight)} mm risers; ${S.maxRiserMm.cite} allows ${S.maxRiserMm.value} mm. Add risers.`, [stair.id]));
+      const longest = Math.max(...lay.flights.map((fl) => fl.risers));
+      if (longest > S.maxRisersPerFlight.value!)
+        out.push(f("block", "tn.stair.flight", `${name} has ${longest} risers in one flight; ${S.maxRisersPerFlight.cite} allows ${S.maxRisersPerFlight.value}. Add a landing.`, [stair.id]));
+      out.push(...confirm("tn.stair.width", "Stair width", S.minWidthM));
+
+      // Open stairs in setbacks, rule 28(a)(iii)
+      if (stair.external && roles) {
+        const R = T.setbackStructures;
+        // Within the buildable area every setback is met; the boundary gaps still matter where a side setback is needed on one side only.
+        const inSetback = !contains(env.buildable, lay.well);
+        const h = buildingHeightMm(project) / 1000;
+        if (inSetback && h > R.openStairUpToBuildingHeightM.value!) {
+          out.push(f("block", "tn.stair.setback_height", `${name} is an open stair in the setback, which ${R.openStairUpToBuildingHeightM.cite} allows only up to ${R.openStairUpToBuildingHeightM.value} m building height; this building is ${h.toFixed(1)} m.`, [stair.id]));
+          continue;
+        }
+        const gaps: Record<Side, number> = { west: lay.well.x0 - plot.x0, east: plot.x1 - lay.well.x1, south: lay.well.y0 - plot.y0, north: plot.y1 - lay.well.y1 };
+        for (const side of ["north", "south", "east", "west"] as Side[]) {
+          const need = (roles[side] === "side" ? R.openStairMinFromSideM.value! : R.openStairMinFromFrontRearM.value!) * 1000;
+          if (gaps[side] < need)
+            out.push(f("block", "tn.stair.setback_gap", `${name} is ${formatMetres(Math.max(0, gaps[side]))} from the ${side} boundary; ${R.openStairMinFromSideM.cite} keeps open stairs ${formatMetres(need)} from a ${roles[side]} boundary.`, [stair.id]));
+        }
+      }
+    }
+    return out;
+  },
+};
+
 export const tncdbr2019: RulePack = {
   id: T.id,
   version: T.version,
   appliesTo: (project) => project.jurisdiction === "IN-TN-CMDA" || project.jurisdiction === "IN-TN-DTCP",
   derive,
-  checks: [roadCheck, heightCheck, setbackCheck, fsiCheck, coverageCheck],
+  checks: [roadCheck, heightCheck, setbackCheck, fsiCheck, coverageCheck, stairCheck],
 };

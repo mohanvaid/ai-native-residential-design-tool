@@ -22,6 +22,10 @@ function step(label: string, ops: OpInput[], opts: { acceptBlocking?: boolean } 
 step("Plot is 30×40 ft, east-facing, 30 ft road", DEMO_ROAD);
 step("Start from a 1BHK ground-floor template", DEMO_GROUND_FLOOR);
 
+step("There is a coconut tree near the gate; keep it", [
+  { op: "AddTree", args: { id: "tr_coconut", species: "Coconut", x: 11000, y: 8200 } },
+]);
+
 step("Make the living room 2 ft deeper, take it from the dining", [
   { op: "ResizeRoom", target: "rm_liv", args: { edge: "north", delta: ftIn(2), strategy: "shrink_neighbour" }, reason: "User asked: make the hall 2 ft deeper" },
 ]);
@@ -30,8 +34,11 @@ step("Push the living room 1 m towards the road (expected to be blocked by the f
   { op: "MoveRoom", target: "rm_liv", args: { dx: 1000 } },
 ]);
 
-step("Add a first floor with a bedroom and toilet", [
+step("Add a first floor with a bedroom, toilet and lounge, and a stair up from the living room", [
   { op: "AddLevel", args: { id: "lv_ff", name: "First" } },
+  { op: "AddStair", args: { id: "st_1", fromLevel: "lv_gf", x: 4920, y: 1360, up: "east", shape: "dog-leg", turn: "left" } },
+  { op: "AddRoom", args: { id: "rm_lng", name: "Lounge", type: "living", level: "lv_ff", x: 4800, y: 1200, width: 4200, depth: 3600 } },
+  { op: "AddOpening", args: { type: "window", room: "rm_lng", side: "east", width: 1500 } },
   { op: "AddRoom", args: { id: "rm_bed2", name: "Bedroom 2", type: "bedroom", level: "lv_ff", x: 600, y: 1200, width: 4200, depth: 3600 } },
   { op: "AddRoom", args: { id: "rm_tlt2", name: "Toilet 2", type: "toilet", level: "lv_ff", x: 600, y: 4800, width: 1800, depth: 1800 } },
   { op: "AddOpening", args: { type: "window", room: "rm_bed2", side: "south", width: 1500 } },
@@ -40,9 +47,11 @@ step("Add a first floor with a bedroom and toilet", [
   { op: "AddOpening", args: { type: "ventilator", room: "rm_tlt2", side: "west" } },
 ]);
 
+step("Frame it: columns at every wall corner and junction", [{ op: "PlaceColumns", args: {} }]);
+
 const undone = store.undo();
 console.log(`\n> Undo the last change\n  ${undone?.summary.join("; ")}`);
-step("Redo it: add the first floor again", store.versions.find((v) => v.label.startsWith("Add a first floor"))!.ops);
+step("Redo it: put the columns back", store.versions.find((v) => v.label.startsWith("Frame it"))!.ops);
 
 const p = store.current;
 mkdirSync("out", { recursive: true });

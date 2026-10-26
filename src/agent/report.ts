@@ -58,6 +58,13 @@ export function changeSummary(before: Project, after: Project, changes: ChangeSe
     openings.changed && `${openings.changed} adjusted`,
   ].filter(Boolean);
   if (o.length) parts.push(o.join(", "));
+  for (const kind of ["tree", "column", "stair"] as const) {
+    const cs = changes.filter((c) => c.kind === kind);
+    const n = { added: cs.filter((c) => !c.before).length, removed: cs.filter((c) => !c.after).length, changed: cs.filter((c) => c.before && c.after).length };
+    const word = (k: number) => `${k} ${kind}${k === 1 ? "" : "s"}`;
+    const bits = [n.added && `${word(n.added)} added`, n.removed && `${word(n.removed)} removed`, n.changed && `${word(n.changed)} adjusted`].filter(Boolean);
+    if (bits.length) parts.push(bits.join(", "));
+  }
   if (changes.some((c) => c.kind === "levels")) parts.push(`levels: ${after.levels.map((l) => l.name).join(", ")}`);
   if (changes.some((c) => c.kind === "plot")) parts.push("plot updated");
 

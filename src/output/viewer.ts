@@ -13,6 +13,7 @@ import { clearRect, deriveWalls } from "../model/walls.js";
 import { ADVISORY_STAMP, floorPlanSheet, renderFloorPlanPdf } from "./floorplan.js";
 import { openingSchedule } from "./schedule.js";
 import { escXml, sheetToSvg } from "./sheet.js";
+import { siteplanSheet } from "./siteplan.js";
 
 export interface ViewerOptions {
   /** Embed the plans PDF so the viewer can download it offline. Default true. */
@@ -55,11 +56,11 @@ function findingItems(findings: Finding[]): string {
 export function renderViewerHtml(project: Project, opts: ViewerOptions = {}): string {
   const rev = revisionLabel(project.version);
   const findings = opts.findings ?? validate(project);
-  const plans = project.levels.map((l, i) => ({
-    id: l.id,
-    name: l.name,
-    svg: sheetToSvg(floorPlanSheet(project, l.id), { fluid: true, id: `sheet-${i}` }),
-  }));
+  const plans = [
+    { id: "site", name: "Site", sheet: siteplanSheet(project) },
+    ...project.levels.map((l) => ({ id: l.id, name: l.name, sheet: floorPlanSheet(project, l.id) })),
+  ].map((p, i) => ({ ...p, svg: sheetToSvg(p.sheet, { fluid: true, id: `sheet-${i}` }) }));
+  const start = plans.length > 1 ? 1 : 0;
   const pdf = opts.includePdf === false ? "" : Buffer.from(renderFloorPlanPdf(project)).toString("base64");
   const fileBase = `${project.name.replace(/[^\w-]+/g, "-").replace(/^-|-$/g, "")}-rev-${rev}`;
   const count = (sev: Finding["severity"]) => findings.filter((f) => f.severity === sev).length;
@@ -120,10 +121,10 @@ td.n, th.n { text-align:right; }
   <div class="stamp">${escXml(ADVISORY_STAMP)}</div>
 </header>
 <nav role="tablist">
-${plans.map((p, i) => `  <button role="tab" data-i="${i}" aria-selected="${i === 0}">${escXml(p.name)}</button>`).join("\n")}
+${plans.map((p, i) => `  <button role="tab" data-i="${i}" aria-selected="${i === start}">${escXml(p.name)}</button>`).join("\n")}
 </nav>
 <main id="stage">
-${plans.map((p, i) => `<div class="plan${i === 0 ? " active" : ""}" data-level="${escXml(p.id)}">${p.svg}</div>`).join("\n")}
+${plans.map((p, i) => `<div class="plan${i === start ? " active" : ""}" data-level="${escXml(p.id)}">${p.svg}</div>`).join("\n")}
   <div class="tools">
     <button id="zin" aria-label="Zoom in">+</button>
     <button id="zout" aria-label="Zoom out">−</button>
@@ -149,7 +150,7 @@ ${plans.map((p, i) => `<div class="plan${i === 0 ? " active" : ""}" data-level="
   const plans = [...document.querySelectorAll(".plan")];
   const tabs = [...document.querySelectorAll("nav button")];
   const views = plans.map(() => null);
-  let cur = 0;
+  let cur = ${start};
 
   const svgOf = (i) => plans[i].querySelector("svg");
   const box = (svg) => svg.viewBox.baseVal;
@@ -235,7 +236,7 @@ ${plans.map((p, i) => `<div class="plan${i === 0 ? " active" : ""}" data-level="
       pdf.dataset.ready = "1";
     });
   }
-  show(0);
+  show(cur);
 })();
 </script>
 </body>

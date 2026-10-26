@@ -147,6 +147,64 @@ export const Opening = z.object({
 });
 export type Opening = z.infer<typeof Opening>;
 
+/** An existing tree to keep or remove. Its root zone keeps the footprint, parking and sumps away. */
+export const Tree = z.object({
+  id: z.string(),
+  species: z.string(),
+  /** Trunk centre, mm from the plot's south-west corner. */
+  at: Point,
+  /** Canopy radius, mm: upper floors and balconies should stay clear of it. */
+  canopyRadius: z.number().positive(),
+  /** Root protection radius, mm: no foundation, column or stair inside it. */
+  rootRadius: z.number().positive(),
+  keep: z.boolean().default(true),
+  meta: Meta,
+});
+export type Tree = z.infer<typeof Tree>;
+
+/**
+ * A column, rectangular in plan, running through a contiguous range of
+ * levels (inclusive). The structural grid is derived from column positions.
+ */
+export const Column = z.object({
+  id: z.string(),
+  /** Centre, mm. */
+  at: Point,
+  /** Size along plot X and plot Y, mm (e.g. 230 × 300 for 9" × 12"). */
+  width: z.number().positive(),
+  depth: z.number().positive(),
+  fromLevel: z.string(),
+  toLevel: z.string(),
+  meta: Meta,
+});
+export type Column = z.infer<typeof Column>;
+
+/**
+ * A stair from one level to the level directly above, within a rectangular
+ * well. `up` is the direction a person faces when starting up the first
+ * flight. A dog-leg stair turns at a half landing at the far end of the well
+ * and comes back alongside the first flight; its flights are half the well
+ * wide. A straight stair fills the well, with a mid landing past 15 risers.
+ */
+export const Stair = z.object({
+  id: z.string(),
+  fromLevel: z.string(),
+  toLevel: z.string(),
+  /** Stair well outline (clear of any walls), counter-clockwise rectangle. */
+  boundary: z.array(Point).min(3),
+  shape: z.enum(["straight", "dog-leg"]),
+  up: Side,
+  /** For a dog-leg: which side of the well the first flight runs along, seen walking up. */
+  turn: z.enum(["left", "right"]).default("right"),
+  /** Number of risers; derived from the floor-to-floor height when absent. */
+  risers: z.number().int().positive().optional(),
+  tread: z.number().positive().default(250),
+  /** An open stair outside the building, which some rules allow in setbacks. */
+  external: z.boolean().default(false),
+  meta: Meta,
+});
+export type Stair = z.infer<typeof Stair>;
+
 export const Jurisdiction = z.enum(["IN-TN-CMDA", "IN-TN-DTCP", "NONE"]);
 export type Jurisdiction = z.infer<typeof Jurisdiction>;
 
@@ -167,12 +225,17 @@ export const Project = z.object({
       vastu: z.enum(["off", "prefer", "strict"]).default("off"),
       budgetInr: z.number().positive().optional(),
       familySize: z.number().int().positive().optional(),
+      /** Beam spans longer than this, in mm, are flagged for the engineer. */
+      maxSpanMm: z.number().positive().default(4500),
     })
-    .default({ vastu: "off" }),
+    .default({ vastu: "off", maxSpanMm: 4500 }),
   plot: Plot,
   levels: z.array(Level),
   rooms: z.array(Room),
   openings: z.array(Opening),
+  trees: z.array(Tree).default([]),
+  columns: z.array(Column).default([]),
+  stairs: z.array(Stair).default([]),
 });
 export type Project = z.infer<typeof Project>;
 

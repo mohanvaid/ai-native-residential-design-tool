@@ -120,11 +120,27 @@ export const TNCDBR_2019 = {
     CBA: [{ upToM: null, cell: { value: 0, cite: `${R35A} E(iii)`, line: 1543 } }] as Band<number>[],
   },
 
-  /** Rule 28(a): structures allowed inside setbacks (not checked yet; for projections later). */
+  /** Rule 28(a): structures allowed inside setbacks. Open stairs are checked; projections come later. */
   setbackStructures: {
     sunshadeMaxM: { value: 0.6, cite: "TNCDBR 2019 r.28(a)(i)", line: 1330, uncertain: "Extracted as \"06m\"; read as 0.6 m." } as Cell<number>,
     compoundWallMaxHeightM: { value: 2.0, cite: "TNCDBR 2019 r.28(a)(iv)", line: 1337 } as Cell<number>,
     openStairUpToBuildingHeightM: { value: 9.0, cite: "TNCDBR 2019 r.28(a)(iii)", line: 1333 } as Cell<number>,
+    openStairMinFromSideM: { value: 0.5, cite: "TNCDBR 2019 r.28(a)(iii)", line: 1335 } as Cell<number>,
+    openStairMinFromFrontRearM: { value: 1.0, cite: "TNCDBR 2019 r.28(a)(iii)", line: 1335 } as Cell<number>,
+  },
+
+  /** Rule 52(17): stairways in residential buildings. */
+  stairs: {
+    minWidthM: {
+      value: 0.75,
+      cite: "TNCDBR 2019 r.52(17)(a)(i)",
+      line: 3182,
+      uncertain: "0.75 m is for \"Ordinary Residential\" buildings and 0.90 m for \"Other Residential\"; a single-family house is read as ordinary.",
+    } as Cell<number>,
+    minTreadMm: { value: 250, cite: "TNCDBR 2019 r.52(17)(b)", line: 3191 } as Cell<number>,
+    maxRiserMm: { value: 190, cite: "TNCDBR 2019 r.52(17)(c)", line: 3196 } as Cell<number>,
+    maxRisersPerFlight: { value: 15, cite: "TNCDBR 2019 r.52(17)(c)", line: 3197 } as Cell<number>,
+    minHeadroomM: { value: 2.2, cite: "TNCDBR 2019 r.52(17)(d)", line: 3199 } as Cell<number>,
   },
 
   /**

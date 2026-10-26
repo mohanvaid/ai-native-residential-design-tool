@@ -2,6 +2,7 @@
 import { contains, bbox, boundaryToRect, overlapArea, rectArea, rectDepth, rectWidth, sideLength } from "./geometry.js";
 import { HABITABLE, type Finding, type Project, type RoomType } from "./schema.js";
 import { formatArea, formatFtIn } from "./units.js";
+import { validateStructure } from "./structure.js";
 import { clearRect, deriveWalls, resolveOpening, roomRect, type Wall } from "./walls.js";
 
 const SOURCE = "core";
@@ -118,6 +119,7 @@ export function validateModel(project: Project): Finding[] {
       out.push(f("warn", "room.no_door", `${room.name} has no door.`, [room.id]));
   }
 
+  out.push(...validateStructure(project));
   return out;
 }
 
