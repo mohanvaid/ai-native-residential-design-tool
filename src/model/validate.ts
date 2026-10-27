@@ -7,6 +7,7 @@ import { validateStructure } from "./structure.js";
 import { validateWetStack } from "./wetstack.js";
 import { validateCores } from "./core.js";
 import { validateMep } from "./mep.js";
+import { validateParking } from "./parking.js";
 import { buildingExtent } from "./areas.js";
 import { clearRect, deriveWalls, resolveOpening, roomRect, type Wall } from "./walls.js";
 
@@ -135,7 +136,7 @@ export function validateModel(project: Project): Finding[] {
         );
     }
 
-  out.push(...validateStructure(project), ...validateCores(project), ...validateFurnishing(project), ...validateWetStack(project), ...validateMep(project));
+  out.push(...validateStructure(project), ...validateCores(project), ...validateFurnishing(project), ...validateWetStack(project), ...validateMep(project), ...validateParking(project));
   return out;
 }
 

@@ -169,7 +169,7 @@ export function referenceFlats(project: Project): OpInput[] {
 export const REF_PARKING: OpInput[] = [
   { op: "PlaceItem", args: { id: "it_car1", catalogue: "car.sedan", room: "rm_park_s", x: OX + ft(19), y: OY + ft(23.6), facing: "north" } },
   { op: "PlaceItem", args: { id: "it_car2", catalogue: "car.suv-compact", room: "rm_park_s", x: OX + ft(30), y: OY + ft(23.6), facing: "north" } },
-  { op: "PlaceItem", args: { id: "it_car3", catalogue: "car.sedan", room: "rm_park_s", x: OX + ft(46), y: OY + ft(23.6), facing: "north" } },
+  { op: "PlaceItem", args: { id: "it_car3", catalogue: "car.sedan", room: "rm_park_s", x: OX + ft(44), y: OY + ft(23.6), facing: "north" } },
 ];
 
 /** Columns at every wall corner and junction from the stilt up. */

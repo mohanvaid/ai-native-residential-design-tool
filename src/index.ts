@@ -25,6 +25,7 @@ export * from "./model/core.js";
 export * from "./model/flats.js";
 export * from "./model/themes.js";
 export * from "./model/mep.js";
+export * from "./model/parking.js";
 export * from "./core/deps.js";
 export { tncdbr2019, buildingHeightMm, fsiArea } from "./rules/packs/tncdbr-2019.js";
 export { TNCDBR_2019 } from "./rules/packs/tncdbr-2019.tables.js";
