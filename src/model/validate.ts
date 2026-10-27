@@ -5,13 +5,15 @@ import { formatArea, formatFtIn } from "./units.js";
 import { validateFurnishing } from "./furnishing.js";
 import { validateStructure } from "./structure.js";
 import { validateWetStack } from "./wetstack.js";
+import { validateCores } from "./core.js";
+import { buildingExtent } from "./areas.js";
 import { clearRect, deriveWalls, resolveOpening, roomRect, type Wall } from "./walls.js";
 
 const SOURCE = "core";
 /** Minimum masonry between an opening and the end of its wall. */
 export const CORNER_CLEARANCE_MM = 100;
 /** Rooms that are open or circulation and need no door of their own. */
-const OPEN_TYPES: ReadonlySet<RoomType> = new Set<RoomType>(["sit-out", "car-porch", "balcony", "passage", "staircase"]);
+const OPEN_TYPES: ReadonlySet<RoomType> = new Set<RoomType>(["sit-out", "car-porch", "balcony", "passage", "staircase", "parking"]);
 
 const f = (severity: Finding["severity"], code: string, message: string, elements: string[]): Finding => ({
   severity,
@@ -121,7 +123,18 @@ export function validateModel(project: Project): Finding[] {
       out.push(f("warn", "room.no_door", `${room.name} has no door.`, [room.id]));
   }
 
-  out.push(...validateStructure(project), ...validateFurnishing(project), ...validateWetStack(project));
+  // Owner's setbacks (e.g. an access passage), on top of the rule setbacks
+  const extent = buildingExtent(project);
+  if (extent)
+    for (const s of project.plot.setbacks) {
+      const kept = { north: plot.y1 - extent.y1, south: extent.y0 - plot.y0, east: plot.x1 - extent.x1, west: extent.x0 - plot.x0 }[s.side];
+      if (kept + 1 < s.distanceMm)
+        out.push(
+          f("block", "setback.owner", `The building comes within ${formatFtIn(kept)} of the ${s.side} edge; you set ${formatFtIn(s.distanceMm)} there${s.purpose === "access" ? " for the access passage" : ""}.`, [s.side]),
+        );
+    }
+
+  out.push(...validateStructure(project), ...validateCores(project), ...validateFurnishing(project), ...validateWetStack(project));
   return out;
 }
 

@@ -334,6 +334,72 @@ export const SetRate = z.object({
   reason,
 });
 
+export const AddCore = z.object({
+  op: z.literal("AddCore"),
+  args: z.object({
+    id: z.string().optional(),
+    kind: z.enum(["lift", "shaft", "duct"]),
+    name: z.string().optional(),
+    x: mm.describe("South-west corner of the core's outer face."),
+    y: mm.describe("South-west corner of the core's outer face."),
+    width: positiveMm.describe("West to east, outer face."),
+    depth: positiveMm.describe("South to north, outer face."),
+    fromLevel: levelRef.optional().describe("Default the lowest level."),
+    toLevel: levelRef.optional().describe("Default the top level that has rooms."),
+    doorSide: Side.optional().describe("Lifts: the side the landing doors open to."),
+    persons: z.number().int().positive().optional().describe("Lifts: rated passengers, default 6."),
+  }),
+  reason,
+});
+
+export const UpdateCore = z.object({
+  op: z.literal("UpdateCore"),
+  target: z.string(),
+  args: z.object({
+    dx: mm.optional(),
+    dy: mm.optional(),
+    width: positiveMm.optional(),
+    depth: positiveMm.optional(),
+    fromLevel: levelRef.optional(),
+    toLevel: levelRef.optional(),
+    doorSide: Side.optional(),
+    persons: z.number().int().positive().optional(),
+    name: z.string().optional(),
+  }),
+  reason,
+});
+
+export const RemoveCore = z.object({ op: z.literal("RemoveCore"), target: z.string(), reason });
+
+export const AssignFlat = z.object({
+  op: z.literal("AssignFlat"),
+  args: z.object({
+    rooms: z.array(z.string()).min(1).describe("Room ids."),
+    flat: z.string().nullable().describe('Flat id such as "F1" or "G-A"; null marks the rooms as common area.'),
+  }),
+  reason,
+});
+
+export const SetSetback = z.object({
+  op: z.literal("SetSetback"),
+  args: z.object({
+    side: Side,
+    distanceMm: positiveMm.nullable().describe("Distance the building keeps from this plot edge; null removes the owner's setback on that side (the rule setback still applies)."),
+    purpose: z.enum(["access", "open-space", "other"]).default("other").describe("access: a drive or passage, e.g. a 12 ft passage to the rear."),
+    note: z.string().optional(),
+  }),
+  reason,
+});
+
+export const SetCompoundWall = z.object({
+  op: z.literal("SetCompoundWall"),
+  args: z.object({
+    sides: z.array(Side).describe("Plot sides with a compound wall; empty removes it."),
+    heightMm: positiveMm.optional().describe("Default 1800 (6 ft)."),
+  }),
+  reason,
+});
+
 export const Op = z.discriminatedUnion("op", [
   SetPlot,
   SetRoad,
@@ -367,6 +433,12 @@ export const Op = z.discriminatedUnion("op", [
   SetPreferences,
   SetFinish,
   SetRate,
+  AddCore,
+  UpdateCore,
+  RemoveCore,
+  AssignFlat,
+  SetSetback,
+  SetCompoundWall,
 ]);
 export type Op = z.infer<typeof Op>;
 /** An op as the compiler emits it, before defaults are filled in. */
@@ -416,4 +488,10 @@ const DESCRIPTIONS: Record<OpName, string> = {
   SetPreferences: "Turn Vastu checks on or off, or set the beam span limit, budget, family size or exterior colour theme.",
   SetFinish: "Choose the floor tile for one or more rooms.",
   SetRate: "Override a cost rate for this project, e.g. a contractor's quote for brickwork; null restores the table rate.",
+  AddCore: "Add a lift, service shaft or duct through a range of levels.",
+  UpdateCore: "Move, resize or extend a lift, shaft or duct.",
+  RemoveCore: "Remove a lift, shaft or duct.",
+  AssignFlat: "Assign rooms to a flat (dwelling unit) for the area statement and per-flat cost, or mark them as common area.",
+  SetSetback: "Set an owner's setback on one plot side on top of the rule setbacks, e.g. a 12 ft access passage.",
+  SetCompoundWall: "Set which plot sides have a compound wall, and its height.",
 };

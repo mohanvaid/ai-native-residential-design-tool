@@ -11,11 +11,12 @@
 import { catalogueItem } from "../catalogue/catalogue.js";
 import { outerRect, unionArea } from "../model/areas.js";
 import { boundaryToRect, rectDepth, rectWidth, type Rect } from "../model/geometry.js";
-import type { Finding, Project, RoomType } from "../model/schema.js";
+import type { Finding, MepKind, Project, RoomType } from "../model/schema.js";
 import { sqmToSqft } from "../model/units.js";
 import { levelIndex, proposeColumns, stairLayout } from "../model/structure.js";
 import { clearRect, deriveWalls, resolveOpening } from "../model/walls.js";
 import { flooringRows, type Table } from "../output/schedules.js";
+import { areaStatement, flatCosts } from "../model/flats.js";
 import { CONTINGENCY, MARGIN, RATE_TABLE_VERSION, rateFor, RATES, type Unit } from "./rates.js";
 
 export interface BoqLine {
@@ -86,6 +87,25 @@ const POINTS: Partial<Record<RoomType, number>> & { default: number } = {
 };
 
 const mid = (band: [number, number]) => (band[0] + band[1]) / 2;
+
+/** Rate code for each kind of electrical or plumbing point. */
+const MEP_RATE: Partial<Record<MepKind, string>> = {
+  light: "EL-03",
+  fan: "EL-03",
+  switchboard: "EL-03",
+  exhaust: "EL-03",
+  "socket-6a": "EL-05",
+  tv: "EL-05",
+  data: "EL-05",
+  "socket-16a": "EL-04",
+  ac: "EL-04",
+  geyser: "EL-04",
+  "water-cold": "PB-04",
+  "water-hot": "PB-04",
+  drain: "PB-05",
+  "floor-trap": "PB-05",
+  "wc-outlet": "PB-05",
+};
 const m = (mm: number) => mm / 1000;
 
 /** Total area of the overlap of two sets of rectangles, mm². */
@@ -242,7 +262,7 @@ export function computeBoq(project: Project): Boq {
         t.add("PT-01", Math.max(0, wallFace - (perimeter - doors) * m(TOILET_DADO_MM)) + ceiling, [room.id]);
         t.add("WP-01", ceiling, [room.id]);
       } else t.add("PT-01", wallFace + ceiling, [room.id]);
-      t.add("EL-01", POINTS[room.type] ?? POINTS.default, [room.id]);
+      if (!project.mep.length) t.add("EL-01", POINTS[room.type] ?? POINTS.default, [room.id]);
       if (room.type === "toilet") t.add("PB-01", 1, [room.id]);
       if (room.type === "kitchen") t.add("PB-02", 1, [room.id]);
     }
@@ -292,6 +312,53 @@ export function computeBoq(project: Project): Boq {
     const cat = catalogueItem(row.finishId)!;
     t.addProduct(cat.id, "Flooring", `${cat.name}, laid`, "m²", mid(cat.priceInr), row.areaSqm, [row.roomId]);
     t.add("FL-02", row.skirtingM, [row.roomId]);
+  }
+
+  // Lifts, shafts and ducts: enclosure walls over their full height, and the lift itself per stop
+  for (const c of project.cores) {
+    const r = boundaryToRect(c.boundary);
+    const a = levelIndex(project, c.fromLevel);
+    const b = levelIndex(project, c.toLevel);
+    if (!r || a < 0 || b < 0) continue;
+    const height = levelsUp(a, b);
+    t.add("LF-02", 2 * (m(rectWidth(r)) + m(rectDepth(r))) * m(height), [c.id]);
+    if (c.kind === "lift") t.add("LF-01", b - a + 1, [c.id]);
+  }
+
+  // Compound wall along the chosen plot sides
+  const cw = project.plot.compoundWall;
+  if (cw?.sides.length) {
+    const plot = boundaryToRect(project.plot.boundary);
+    if (plot) {
+      const len = cw.sides.reduce((s, side) => s + (side === "north" || side === "south" ? rectWidth(plot) : rectDepth(plot)), 0);
+      t.add("CW-01", m(len) * (cw.heightMm / 1800), ["plot"]);
+      assumptions.push(`Compound wall priced per metre for a 1.8 m wall, scaled to ${m(cw.heightMm)} m.`);
+    }
+  }
+
+  // Electrical and plumbing points from the layout when there is one; otherwise the per-room estimate above stands
+  if (project.mep.length) {
+    for (const pt of project.mep) {
+      const code = MEP_RATE[pt.kind];
+      if (code) t.add(code, 1, [pt.id, pt.room]);
+    }
+    const stacks = project.mep.filter((pt) => pt.kind === "stack");
+    for (const st of stacks) {
+      const room = project.rooms.find((r) => r.id === st.room);
+      const lv = project.levels.find((l) => l.id === room?.level);
+      if (lv) t.add("PB-06", m(lv.floorToFloor), [st.id]);
+    }
+  }
+
+  // Theme paint, extra over standard emulsion
+  if (project.prefs.interiorTheme) {
+    const painted = project.rooms.filter((r) => r.finishes.wall?.startsWith("paint."));
+    for (const room of painted) {
+      const lv = project.levels.find((l) => l.id === room.level);
+      if (!lv) continue;
+      const c = clearRect(deriveWalls(project, room.level), room);
+      t.add("PT-03", 2 * (m(rectWidth(c)) + m(rectDepth(c))) * m(lv.floorToFloor - lv.slabThickness), [room.id]);
+    }
   }
 
   // Services
@@ -381,6 +448,21 @@ export function boqTable(project: Project, boq = computeBoq(project)): Table {
 }
 
 /** A warning when the estimate passes the owner's budget. */
+/** Construction cost per flat, shared by super built-up area. */
+export function flatCostTable(project: Project, boq = computeBoq(project)): Table {
+  const st = areaStatement(project);
+  const costs = flatCosts(project, boq, st);
+  return {
+    title: "Cost per flat",
+    head: ["Flat", "Super built-up", "Share of construction", "Per sq ft"],
+    numeric: [1, 2, 3],
+    rows: costs.map((c) => {
+      const f = st.flats.find((x) => x.flat === c.flat)!;
+      return [c.flat, `${Math.round(sqmToSqft(f.superBuiltUpSqm)).toLocaleString("en-IN")} sq ft`, formatInr(c.amount), formatInr(c.perSqftSuperBuiltUp)];
+    }),
+  };
+}
+
 export function costFindings(project: Project): Finding[] {
   const budget = project.prefs.budgetInr;
   if (!budget || !project.rooms.length) return [];

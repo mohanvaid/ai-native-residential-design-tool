@@ -6,7 +6,8 @@
 import { revisionLabel } from "../agent/report.js";
 import { buildingExtent } from "../model/areas.js";
 import { bbox, rectDepth, rectWidth, type Rect } from "../model/geometry.js";
-import type { Project, Side, Stair, Tree } from "../model/schema.js";
+import type { Core, Project, Side, Stair, Tree } from "../model/schema.js";
+import { coreRect, coresOn, liftLanding } from "../model/core.js";
 import { columnRect, columnsOn, stairLayout, structuralGrid, type StairLayout } from "../model/structure.js";
 import { formatFtIn, formatMetres } from "../model/units.js";
 import { rulePacksFor } from "../rules/registry.js";
@@ -72,6 +73,32 @@ export function sheetFrame(project: Project, opts: { showSetbacks?: boolean } = 
         text(P((gap.x0 + gap.x1) / 2, (gap.y0 + gap.y1) / 2), `${cap(s.role)} ${formatMetres(provided)} (${req})`, SMALL, { rotate: vertical ? -90 : 0, fill: "#c0392b" });
       }
     }
+  }
+
+  // Compound wall: a solid band just inside the boundary on the chosen sides
+  const cw = project.plot.compoundWall;
+  if (cw)
+    for (const side of cw.sides) {
+      const band = inside(plot, side, 230);
+      items.push({ kind: "rect", ...box(band), fill: "#555555" });
+    }
+
+  // Owner's setbacks: a dashed blue line, labelled with its purpose
+  for (const sb of project.plot.setbacks) {
+    const strip = inside(plot, sb.side, sb.distanceMm);
+    const [a, b] = {
+      north: [P(plot.x0, strip.y0), P(plot.x1, strip.y0)],
+      south: [P(plot.x0, strip.y1), P(plot.x1, strip.y1)],
+      east: [P(strip.x0, plot.y0), P(strip.x0, plot.y1)],
+      west: [P(strip.x1, plot.y0), P(strip.x1, plot.y1)],
+    }[sb.side] as [Pt, Pt];
+    items.push({ kind: "line", a, b, stroke: "#1f5fa8", sw: 25, dash: [300, 120] });
+    const purpose = sb.purpose === "access" ? "ACCESS PASSAGE" : sb.purpose === "open-space" ? "OPEN SPACE" : "SETBACK";
+    const note = sb.note && sb.note.toUpperCase() !== purpose ? ` · ${sb.note}` : "";
+    const vertical = sb.side === "east" || sb.side === "west";
+    // A quarter of the way along, clear of the rule setback label at the middle
+    const c = vertical ? P((strip.x0 + strip.x1) / 2, strip.y0 + (strip.y1 - strip.y0) / 4) : P(strip.x0 + (strip.x1 - strip.x0) / 4, (strip.y0 + strip.y1) / 2);
+    text(c, `${purpose} ${formatFtIn(sb.distanceMm)}${note}`, SMALL, { rotate: vertical ? -90 : 0, fill: "#1f5fa8", bold: true });
   }
 
   // Plot size
@@ -191,6 +218,56 @@ export function drawStructure(fr: Frame, project: Project, levelId: string | nul
     fr.text(fr.P(left, g.at), g.label, SMALL, { bold: true });
   }
   for (const c of cols) fr.items.push({ kind: "rect", ...fr.box(columnRect(c)), fill: "#000000" });
+}
+
+/** A band of the given depth inside one side of a rectangle. */
+export function inside(r: Rect, side: Side, depth: number): Rect {
+  switch (side) {
+    case "north":
+      return { x0: r.x0, x1: r.x1, y0: r.y1 - depth, y1: r.y1 };
+    case "south":
+      return { x0: r.x0, x1: r.x1, y0: r.y0, y1: r.y0 + depth };
+    case "east":
+      return { x0: r.x1 - depth, x1: r.x1, y0: r.y0, y1: r.y1 };
+    case "west":
+      return { x0: r.x0, x1: r.x0 + depth, y0: r.y0, y1: r.y1 };
+  }
+}
+
+/** Lifts, shafts and ducts through a level (or all of them on the site plan): enclosure, then a crossed car or hatched duct. */
+export function drawCores(fr: Frame, project: Project, levelId: string | null): void {
+  const cores: Core[] = levelId ? coresOn(project, levelId) : project.cores;
+  for (const c of cores) {
+    const r = coreRect(c);
+    if (!r) continue;
+    const t = 230;
+    const inner = { x0: r.x0 + t, x1: r.x1 - t, y0: r.y0 + t, y1: r.y1 - t };
+    fr.items.push({ kind: "rect", ...fr.box(r), fill: "hatch", stroke: "#000", sw: 15 });
+    fr.items.push({ kind: "rect", ...fr.box(inner), fill: "#ffffff", stroke: "#000", sw: 12 });
+    const [a, b] = [fr.P(inner.x0, inner.y0), fr.P(inner.x1, inner.y1)];
+    if (c.kind === "lift") {
+      fr.items.push({ kind: "line", a, b, stroke: "#000", sw: 10 }, { kind: "line", a: [a[0], b[1]], b: [b[0], a[1]], stroke: "#000", sw: 10 });
+      // Landing door: a gap in the enclosure on the door side
+      if (c.doorSide) {
+        const vertical = c.doorSide === "east" || c.doorSide === "west";
+        const mid = vertical ? (r.y0 + r.y1) / 2 : (r.x0 + r.x1) / 2;
+        const half = Math.min(450, ((vertical ? r.y1 - r.y0 : r.x1 - r.x0) - 2 * t) / 2);
+        const band = inside(r, c.doorSide, t);
+        const gap = vertical ? { ...band, y0: mid - half, y1: mid + half } : { ...band, x0: mid - half, x1: mid + half };
+        fr.items.push({ kind: "rect", ...fr.box(gap), fill: "#ffffff" });
+        const land = liftLanding(c);
+        if (land) fr.items.push({ kind: "rect", ...fr.box(land), stroke: "#888888", sw: 8, dash: [60, 60] });
+      }
+    } else {
+      for (let k = 1; k < 6; k++) {
+        const x = inner.x0 + ((inner.x1 - inner.x0) * k) / 6;
+        fr.items.push({ kind: "line", a: fr.P(x, inner.y0), b: fr.P(x, inner.y1), stroke: "#888888", sw: 8 });
+      }
+    }
+    const cxy = fr.P((r.x0 + r.x1) / 2, (r.y0 + r.y1) / 2);
+    fr.text([cxy[0], cxy[1]], (c.name ?? c.kind).toUpperCase(), SMALL, { bold: true });
+    if (c.kind === "lift") fr.text([cxy[0], cxy[1] + SMALL * 1.3], `${c.persons ?? 6} persons`, SMALL - 40, { fill: "#555" });
+  }
 }
 
 /** A band of the given depth outside one side of a rectangle. */

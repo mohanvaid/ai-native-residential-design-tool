@@ -52,6 +52,16 @@ export const RATES: readonly Rate[] = [
   { code: "PB-01", trade: "Plumbing", description: "Toilet plumbing: water supply, drainage, CP fittings and fixtures", unit: "set", rate: 55000, labour: 0.3 },
   { code: "PB-02", trade: "Plumbing", description: "Kitchen sink, water and drainage points", unit: "set", rate: 18000, labour: 0.3 },
   { code: "PB-03", trade: "Plumbing", description: "Sump, overhead tank, pump and external drainage (allowance)", unit: "set", rate: 160000, labour: 0.35 },
+  { code: "LF-01", trade: "Lift", description: "Machine-room-less passenger lift, supplied and installed, per stop", unit: "no.", rate: 260000, labour: 0.15 },
+  { code: "LF-02", trade: "Lift", description: "Lift shaft and duct enclosure, RCC/brick 230 mm, plastered", unit: "m²", rate: 2400, labour: 0.4 },
+  { code: "CW-01", trade: "Compound wall", description: "Compound wall, 230 mm brick on footing with coping, plastered and painted both sides", unit: "m", rate: 7800, labour: 0.4 },
+  { code: "EL-03", trade: "Electrical", description: "Light, fan or switchboard point, wired (from the electrical layout)", unit: "point", rate: 1500, labour: 0.4 },
+  { code: "EL-04", trade: "Electrical", description: "Power point 16 A, AC or geyser point, wired on its own circuit", unit: "point", rate: 2600, labour: 0.4 },
+  { code: "EL-05", trade: "Electrical", description: "Socket 6 A, TV or data point, wired", unit: "point", rate: 1200, labour: 0.4 },
+  { code: "PB-04", trade: "Plumbing", description: "Water supply point, CPVC concealed (from the plumbing layout)", unit: "point", rate: 2200, labour: 0.4 },
+  { code: "PB-05", trade: "Plumbing", description: "Drainage point, floor trap or WC outlet, uPVC", unit: "point", rate: 2600, labour: 0.4 },
+  { code: "PB-06", trade: "Plumbing", description: "Soil/waste stack, uPVC 110 mm with fittings, per storey", unit: "m", rate: 1400, labour: 0.35 },
+  { code: "PT-03", trade: "Painting", description: "Internal premium emulsion in a theme colour, extra over standard", unit: "m²", rate: 45, labour: 0.5 },
 ];
 
 const BY_CODE = new Map(RATES.map((r) => [r.code, r]));

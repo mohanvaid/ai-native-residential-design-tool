@@ -15,7 +15,7 @@ import {
 import { catalogueItem, type CatalogueItem } from "../catalogue/catalogue.js";
 import { rateFor } from "../cost/rates.js";
 import { placeItem } from "../model/furnishing.js";
-import { Column, Level, Opening, PlacedItem, Room, Stair, Tree, type OpeningType, type Side } from "../model/schema.js";
+import { Column, Core, Level, Opening, PlacedItem, Room, Stair, Tree, type OpeningType, type Side } from "../model/schema.js";
 import { DEFAULT_MAX_RISER_MM, levelIndex, proposeColumns, stairWellRect, stairWellSize, TREE_DEFAULTS, TREE_FALLBACK } from "../model/structure.js";
 import { deriveWalls, roomRect } from "../model/walls.js";
 import { zoneOf } from "../model/zones.js";
@@ -75,6 +75,13 @@ export function applyOp(draft: Draft, op: Op, opIndex: number): void {
       draft.requireLevel(op.target);
       if (draft.project.levels.length === 1) throw new OpError("A project needs at least one level.", "level.last");
       const rooms = draft.project.rooms.filter((r) => r.level === op.target);
+      for (const c of draft.project.cores.filter((c) => c.fromLevel === op.target || c.toLevel === op.target)) {
+        const lv = draft.project.levels;
+        const j = lv.findIndex((l) => l.id === op.target);
+        if (c.fromLevel === op.target && c.toLevel === op.target) draft.remove("core", c.id);
+        else if (c.fromLevel === op.target) draft.put("core", { ...c, fromLevel: lv[j + 1]!.id });
+        else draft.put("core", { ...c, toLevel: lv[j - 1]!.id });
+      }
       if (rooms.length)
         throw new OpError(
           `Level still has ${rooms.length} room(s): ${rooms.map((r) => r.name).join(", ")}. Remove them first.`,
@@ -125,6 +132,7 @@ export function applyOp(draft: Draft, op: Op, opIndex: number): void {
       draft.requireRoom(op.target);
       for (const o of draft.project.openings.filter((o) => o.host.room === op.target)) draft.removeOpening(o.id);
       for (const it of draft.project.items.filter((it) => it.room === op.target)) draft.remove("item", it.id);
+      for (const pt of draft.project.mep.filter((pt) => pt.room === op.target)) draft.remove("mep", pt.id);
       draft.removeRoom(op.target);
       return;
     }
@@ -428,6 +436,85 @@ export function applyOp(draft: Draft, op: Op, opIndex: number): void {
     case "RemoveStair": {
       draft.require("stair", op.target);
       draft.remove("stair", op.target);
+      return;
+    }
+
+    case "AddCore": {
+      const a = op.args;
+      const id = a.id ?? draft.nextId(a.kind === "lift" ? "lift" : "core");
+      if (draft.get("core", id)) throw new OpError(`Core id "${id}" already exists.`, "core.duplicate");
+      const fromLevel = a.fromLevel ?? draft.project.levels[0]!.id;
+      const toLevel = a.toLevel ?? topLevel(draft);
+      draft.requireLevel(fromLevel);
+      draft.requireLevel(toLevel);
+      if (levelIndex(draft.project, fromLevel) > levelIndex(draft.project, toLevel)) throw new OpError("fromLevel is above toLevel.", "core.levels_reversed");
+      draft.put(
+        "core",
+        Core.parse({
+          id,
+          kind: a.kind,
+          name: a.name,
+          boundary: rectToBoundary({ x0: a.x, y0: a.y, x1: a.x + a.width, y1: a.y + a.depth }),
+          fromLevel,
+          toLevel,
+          doorSide: a.doorSide,
+          persons: a.kind === "lift" ? (a.persons ?? 6) : undefined,
+          meta,
+        }),
+      );
+      return;
+    }
+
+    case "UpdateCore": {
+      const c = draft.require("core", op.target);
+      const a = op.args;
+      const r = boundaryToRect(c.boundary);
+      if (!r) throw new OpError("The core is not a rectangle.", "core.not_rectangle");
+      const x0 = r.x0 + (a.dx ?? 0);
+      const y0 = r.y0 + (a.dy ?? 0);
+      const fromLevel = a.fromLevel ?? c.fromLevel;
+      const toLevel = a.toLevel ?? c.toLevel;
+      draft.requireLevel(fromLevel);
+      draft.requireLevel(toLevel);
+      if (levelIndex(draft.project, fromLevel) > levelIndex(draft.project, toLevel)) throw new OpError("fromLevel is above toLevel.", "core.levels_reversed");
+      draft.put("core", {
+        ...c,
+        boundary: rectToBoundary({ x0, y0, x1: x0 + (a.width ?? rectWidth(r)), y1: y0 + (a.depth ?? rectDepth(r)) }),
+        fromLevel,
+        toLevel,
+        ...(a.doorSide ? { doorSide: a.doorSide } : {}),
+        ...(a.persons ? { persons: a.persons } : {}),
+        ...(a.name ? { name: a.name } : {}),
+      });
+      return;
+    }
+
+    case "RemoveCore": {
+      draft.require("core", op.target);
+      draft.remove("core", op.target);
+      return;
+    }
+
+    case "AssignFlat": {
+      for (const id of op.args.rooms) {
+        const { flat: _old, ...room } = draft.requireRoom(id);
+        draft.putRoom(op.args.flat === null ? room : { ...room, flat: op.args.flat });
+      }
+      return;
+    }
+
+    case "SetSetback": {
+      const { side, distanceMm, purpose, note } = op.args;
+      const setbacks = draft.project.plot.setbacks.filter((s) => s.side !== side);
+      if (distanceMm !== null) setbacks.push({ side, distanceMm, purpose, ...(note ? { note } : {}) });
+      draft.setPlot({ ...draft.project.plot, setbacks });
+      return;
+    }
+
+    case "SetCompoundWall": {
+      const { sides, heightMm } = op.args;
+      const { compoundWall: old, ...plot } = draft.project.plot;
+      draft.setPlot(sides.length ? { ...plot, compoundWall: { sides: [...new Set(sides)], heightMm: heightMm ?? old?.heightMm ?? 1800 } } : plot);
       return;
     }
   }

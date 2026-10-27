@@ -38,6 +38,8 @@ export function validateWetStack(project: Project): Finding[] {
 
       if (i === 0) continue;
       const below = levels[i - 1]!;
+      // Over an open stilt the pipes run under its slab to an outside stack.
+      if (below.kind === "stilt") continue;
       const r = boundaryToRect(room.boundary)!;
       const under = on(below.id)
         .map((b) => ({ b, area: overlapArea(r, boundaryToRect(b.boundary)!) }))

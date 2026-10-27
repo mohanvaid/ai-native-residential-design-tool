@@ -46,6 +46,13 @@ export const Plot = z.object({
    * Building Areas or Economically Weaker Section areas (TNCDBR 2019 rule 30).
    */
   areaClass: z.enum(["other", "CBA", "EWS"]).default("other"),
+  /**
+   * Setbacks the owner sets on top of the rules, e.g. a 12 ft north setback
+   * kept as the access passage. The building must keep clear of them.
+   */
+  setbacks: z.array(z.object({ side: Side, distanceMm: z.number().nonnegative(), purpose: z.enum(["access", "open-space", "other"]).default("other"), note: z.string().optional() })).default([]),
+  /** Compound wall along these plot sides, with its height. */
+  compoundWall: z.object({ sides: z.array(Side), heightMm: z.number().positive().default(1800) }).optional(),
 });
 export type Plot = z.infer<typeof Plot>;
 
@@ -80,6 +87,8 @@ export const RoomType = z.enum([
   "car-porch",
   "balcony",
   "passage",
+  "lobby",
+  "parking",
   "other",
 ]);
 export type RoomType = z.infer<typeof RoomType>;
@@ -111,7 +120,13 @@ export const Room = z.object({
       minWidth: z.number().positive().optional(),
     })
     .default({}),
+  /**
+   * Finish catalogue id per surface: floor (tile.*), wall and ceiling
+   * (paint.*), dado (wall tiles in wet rooms).
+   */
   finishes: z.record(z.string(), z.string()).default({}),
+  /** The dwelling unit this room belongs to (e.g. "F1"), for area statements and per-flat cost. Common areas have none. */
+  flat: z.string().optional(),
   /** Compass zone of the room centre relative to the plot, from true north (SW, NE, C, ...). */
   zoneTags: z.array(z.string()).default([]),
   meta: Meta,
@@ -206,6 +221,67 @@ export const Stair = z.object({
 export type Stair = z.infer<typeof Stair>;
 
 /**
+ * A vertical core element: a lift, or a shaft/duct for services, running
+ * through a contiguous range of levels (inclusive) in a rectangular outline
+ * (outer face of its enclosure). Rooms and stairs must keep out of it.
+ */
+export const Core = z.object({
+  id: z.string(),
+  kind: z.enum(["lift", "shaft", "duct"]),
+  name: z.string().optional(),
+  boundary: z.array(Point).min(3),
+  fromLevel: z.string(),
+  toLevel: z.string(),
+  /** Lifts: the side the landing doors open to. */
+  doorSide: Side.optional(),
+  /** Lifts: rated passengers. */
+  persons: z.number().int().positive().optional(),
+  meta: Meta,
+});
+export type Core = z.infer<typeof Core>;
+
+/**
+ * An electrical or plumbing point in a room, at a height above the floor.
+ * Electrical points carry a circuit; plumbing points a stack they drain to
+ * or a supply they draw from.
+ */
+export const MepKind = z.enum([
+  "light",
+  "fan",
+  "switchboard",
+  "socket-6a",
+  "socket-16a",
+  "ac",
+  "tv",
+  "data",
+  "exhaust",
+  "geyser",
+  "db",
+  "water-cold",
+  "water-hot",
+  "drain",
+  "floor-trap",
+  "wc-outlet",
+  "stack",
+]);
+export type MepKind = z.infer<typeof MepKind>;
+
+export const MepPoint = z.object({
+  id: z.string(),
+  kind: MepKind,
+  room: z.string(),
+  at: Point,
+  heightMm: z.number().nonnegative(),
+  circuit: z.string().optional(),
+  /** Plumbing: the stack or supply it connects to. */
+  stack: z.string().optional(),
+  /** The placed item this point serves, if any. */
+  serves: z.string().optional(),
+  meta: Meta,
+});
+export type MepPoint = z.infer<typeof MepPoint>;
+
+/**
  * A catalogue item placed in a room: furniture, sanitaryware, an appliance
  * or a vehicle. Its footprint is the catalogue's width (along the front) by
  * depth, centred on `at`, with the front facing `facing`.
@@ -249,6 +325,8 @@ export const Project = z.object({
       theme: z.enum(["classic", "modern", "earthy"]).default("classic"),
       /** Project overrides of the cost rate table, INR per unit by rate code or catalogue id. */
       rates: z.record(z.string(), z.number().positive()).default({}),
+      /** Interior colour theme last applied with ApplyTheme. */
+      interiorTheme: z.string().optional(),
     })
     .default({ vastu: "off", maxSpanMm: 4500, theme: "classic", rates: {} }),
   plot: Plot,
@@ -259,6 +337,8 @@ export const Project = z.object({
   columns: z.array(Column).default([]),
   stairs: z.array(Stair).default([]),
   items: z.array(PlacedItem).default([]),
+  cores: z.array(Core).default([]),
+  mep: z.array(MepPoint).default([]),
 });
 export type Project = z.infer<typeof Project>;
 

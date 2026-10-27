@@ -11,7 +11,8 @@ import { clearRect, deriveWalls, resolveOpening, type ResolvedOpening, type Wall
 import { catalogueItem } from "../catalogue/catalogue.js";
 import { itemRect } from "../model/furnishing.js";
 import { drawPlacedItem } from "./symbols.js";
-import { drawStair, drawStructure, drawTree, sheetFrame, SMALL, TEXT } from "./frame.js";
+import { drawCores, drawStair, drawStructure, drawTree, sheetFrame, SMALL, TEXT } from "./frame.js";
+import { coreRect, coresOn } from "../model/core.js";
 import { sheetsToPdf, type Paper } from "./pdf.js";
 import { marksById } from "./schedule.js";
 import { sheetToSvg, type Item, type Pt, type Sheet } from "./sheet.js";
@@ -27,6 +28,8 @@ const ROOM_FILL: Partial<Record<RoomType, string>> = {
   toilet: "#e3f4f1",
   puja: "#fdf3d1",
   staircase: "#eeeeee",
+  lobby: "#eeeeee",
+  parking: "#f2f2f2",
   "sit-out": "#eef5e6",
   "car-porch": "#eeeeee",
   balcony: "#eef5e6",
@@ -117,12 +120,16 @@ export function floorPlanSheet(project: Project, levelId: string, opts: FloorPla
     else if (st.toLevel === levelId) drawStair(fr, project, st, "DN");
   }
 
+  // Lifts, shafts and ducts
+  drawCores(fr, project, levelId);
+
   // Columns and grid
   drawStructure(fr, project, levelId);
 
   // Room tags
   const obstacles = [
     ...project.stairs.filter((st) => st.fromLevel === levelId || st.toLevel === levelId).map((st) => boundaryToRect(st.boundary)),
+    ...coresOn(project, levelId).map(coreRect),
     ...project.items.filter((it) => rooms.some((r) => r.id === it.room)).map((it) => {
       const cat = catalogueItem(it.catalogue);
       return cat ? itemRect(it, cat) : null;

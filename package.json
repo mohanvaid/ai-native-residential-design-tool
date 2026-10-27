@@ -2,14 +2,15 @@
   "name": "@ai-native-rdt/engine",
   "version": "0.1.0",
   "private": true,
-  "description": "Parametric building model engine for the AI-native residential design tool (Chennai / Tamil Nadu, houses up to G+2).",
+  "description": "Parametric building model engine for the AI-native residential design tool (Chennai / Tamil Nadu, independent houses and stilt + 3 apartment buildings).",
   "type": "module",
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
     "demo": "tsx examples/demo-house.ts",
-    "chat": "tsx examples/chat.ts"
+    "chat": "tsx examples/chat.ts",
+    "reference": "tsx examples/reference-project.ts"
   },
   "repository": {
     "type": "git",

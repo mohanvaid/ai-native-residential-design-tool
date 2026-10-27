@@ -39,6 +39,10 @@ export function modelSummary(project: Project): string {
     `Roads: ${project.plot.abuttingRoads.map((r) => `${r.side} side, ${r.widthM} m${r.name ? ` (${r.name})` : ""}`).join("; ") || "none set"}. Jurisdiction ${project.jurisdiction}, area class ${project.plot.areaClass}. Vastu: ${project.prefs.vastu}.`,
   );
 
+  if (project.plot.setbacks.length)
+    lines.push(`Owner's setbacks (the building must keep clear): ${project.plot.setbacks.map((s) => `${s.side} ${s.distanceMm} mm (${s.purpose}${s.note ? `, ${s.note}` : ""})`).join("; ")}.`);
+  if (project.plot.compoundWall) lines.push(`Compound wall on ${project.plot.compoundWall.sides.join(", ")}, ${project.plot.compoundWall.heightMm} mm high.`);
+
   const env = rulePacksFor(project)[0]?.derive(project);
   if (env?.setbacks.length) {
     lines.push(
@@ -93,6 +97,14 @@ export function modelSummary(project: Project): string {
       lines.push(`- ${st.id} ${st.shape}${st.external ? " open/external" : ""} from ${name(st.fromLevel)} to ${name(st.toLevel)}, ${where}, starts going ${st.up}${st.shape === "dog-leg" ? `, turns ${st.turn}` : ""}${lay ? `, ${lay.risers} risers of ${Math.round(lay.riserHeight)} mm, ${st.tread} mm treads, flights ${Math.round(lay.flightWidth)} mm wide` : ""}`);
     }
   }
+  if (project.cores.length) {
+    lines.push("", "Lifts, shafts and ducts (outer rectangle in mm):");
+    const name = (id: string) => project.levels.find((l) => l.id === id)?.name ?? id;
+    for (const c of project.cores) {
+      const r = boundaryToRect(c.boundary);
+      lines.push(`- ${c.id} ${c.kind}${c.name ? ` "${c.name}"` : ""} ${r ? `x ${r.x0}–${r.x1}, y ${r.y0}–${r.y1}` : ""}, ${name(c.fromLevel)} to ${name(c.toLevel)}${c.doorSide ? `, doors ${c.doorSide}` : ""}${c.persons ? `, ${c.persons} persons` : ""}`);
+    }
+  }
   if (project.columns.length) {
     const grid = structuralGrid(project);
     lines.push("", `Columns: ${project.columns.length}, max beam span ${project.prefs.maxSpanMm} mm. Grid ${grid.x.map((g) => `${g.label}=${g.at}`).join(" ")} (x), ${grid.y.map((g) => `${g.label}=${g.at}`).join(" ")} (y).`);
@@ -136,5 +148,5 @@ function roomLine(project: Project, room: Room, walls: Wall[]): string {
     });
     return `${COMPASS[side]} (${seg.at}): ${parts.join(", ") || "?"}`;
   });
-  return `- ${room.id} "${room.name}" (${room.type}), x ${r.x0}–${r.x1}, y ${r.y0}–${r.y1}; clear ${formatFtIn(rectWidth(c))} × ${formatFtIn(rectDepth(c))} (W×D); zone ${room.zoneTags.join(",")}; walls ${sides.join("; ")}`;
+  return `- ${room.id} "${room.name}" (${room.type})${room.flat ? ` flat ${room.flat}` : ""}, x ${r.x0}–${r.x1}, y ${r.y0}–${r.y1}; clear ${formatFtIn(rectWidth(c))} × ${formatFtIn(rectDepth(c))} (W×D); zone ${room.zoneTags.join(",")}; walls ${sides.join("; ")}`;
 }

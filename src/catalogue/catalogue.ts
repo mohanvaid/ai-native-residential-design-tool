@@ -74,10 +74,10 @@ export const CATALOGUE: readonly CatalogueItem[] = [
   { id: "basin.wall@1", name: "Wash basin", category: "sanitary", symbol: "basin", width: 550, depth: 450, height: 800, clearance: C(600, 100), rooms: ["toilet", "dining", "passage"], services: ["water", "drain"], priceInr: [3000, 15000] },
   { id: "shower.area@1", name: "Shower area", category: "sanitary", symbol: "shower", width: 900, depth: 900, height: 0, clearance: C(0), rooms: ["toilet"], services: ["water", "drain"], priceInr: [4000, 20000] },
   // Vehicles: width across the car, depth nose to tail; the front is the nose. Sides leave room to open doors.
-  { id: "car.hatchback@1", name: "Hatchback", category: "vehicle", symbol: "car", width: 1700, depth: 3800, height: 1550, clearance: C(300, 600, 300), rooms: ["car-porch"], priceInr: [0, 0] },
-  { id: "car.sedan@1", name: "Sedan", category: "vehicle", symbol: "car", width: 1750, depth: 4500, height: 1500, clearance: C(300, 600, 300), rooms: ["car-porch"], priceInr: [0, 0] },
-  { id: "car.suv-compact@1", name: "Compact SUV", category: "vehicle", symbol: "car", width: 1800, depth: 4000, height: 1650, clearance: C(300, 600, 300), rooms: ["car-porch"], priceInr: [0, 0] },
-  { id: "car.suv@1", name: "Full-size SUV", category: "vehicle", symbol: "car", width: 1900, depth: 4800, height: 1800, clearance: C(300, 600, 300), rooms: ["car-porch"], priceInr: [0, 0] },
+  { id: "car.hatchback@1", name: "Hatchback", category: "vehicle", symbol: "car", width: 1700, depth: 3800, height: 1550, clearance: C(300, 600, 300), rooms: ["car-porch", "parking"], priceInr: [0, 0] },
+  { id: "car.sedan@1", name: "Sedan", category: "vehicle", symbol: "car", width: 1750, depth: 4500, height: 1500, clearance: C(300, 600, 300), rooms: ["car-porch", "parking"], priceInr: [0, 0] },
+  { id: "car.suv-compact@1", name: "Compact SUV", category: "vehicle", symbol: "car", width: 1800, depth: 4000, height: 1650, clearance: C(300, 600, 300), rooms: ["car-porch", "parking"], priceInr: [0, 0] },
+  { id: "car.suv@1", name: "Full-size SUV", category: "vehicle", symbol: "car", width: 1900, depth: 4800, height: 1800, clearance: C(300, 600, 300), rooms: ["car-porch", "parking"], priceInr: [0, 0] },
   { id: "scooter@1", name: "Scooter", category: "vehicle", symbol: "scooter", width: 700, depth: 1850, height: 1150, clearance: C(300, 300, 300), rooms: ["car-porch", "sit-out"], priceInr: [0, 0] },
   // Doors and windows: sizes for AddOpening, prices for the estimate.
   { id: "door.main-teak@1", name: "Main door, teak", category: "door", symbol: "box", width: 1050, depth: 0, height: 2100, clearance: C(0), priceInr: [45000, 120000] },

@@ -6,6 +6,7 @@ import {
   ModelStore,
   newProject,
   opToolDefinitions,
+  OP_SCHEMAS,
   validate,
   type OpInput,
   type Project,
@@ -185,7 +186,8 @@ describe("tool definitions", () => {
   it("exposes every op as a JSON-schema tool", () => {
     const tools = opToolDefinitions();
     expect(tools.map((t) => t.name)).toContain("ResizeRoom");
-    expect(tools).toHaveLength(32);
+    expect(tools).toHaveLength(OP_SCHEMAS.length);
+    expect(tools.length).toBeGreaterThanOrEqual(38);
     expect(JSON.stringify(tools.find((t) => t.name === "AddRoom")!.input_schema)).toContain("depth");
   });
 });

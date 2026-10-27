@@ -8,7 +8,8 @@ import { catalogueItem } from "../catalogue/catalogue.js";
 import { itemRect } from "../model/furnishing.js";
 import { bbox, boundaryToRect, type Rect } from "../model/geometry.js";
 import type { Project } from "../model/schema.js";
-import { stairLayout } from "../model/structure.js";
+import { columnRect, columnsOn, stairLayout } from "../model/structure.js";
+import { coreRect, coresOn } from "../model/core.js";
 import { deriveWalls, resolveOpening, type Wall } from "../model/walls.js";
 import { palette } from "./theme.js";
 
@@ -148,6 +149,40 @@ export function buildScene(project: Project): Scene {
         rise += fl.risers;
         if (fl === lay.flights[0] && lay.landing) add(lay.landing.x0, lay.landing.y0, z0 + rise * lay.riserHeight - 150, lay.landing.x1, lay.landing.y1, z0 + rise * lay.riserHeight, "stair", li);
       }
+    }
+
+    // Lifts, shafts and ducts: four enclosure walls per floor, with the lift's landing door left open
+    for (const c of coresOn(project, level.id)) {
+      const r = coreRect(c);
+      if (!r) continue;
+      const t = 230;
+      const sides = { south: [r.x0, r.y0, r.x1, r.y0 + t], north: [r.x0, r.y1 - t, r.x1, r.y1], west: [r.x0, r.y0, r.x0 + t, r.y1], east: [r.x1 - t, r.y0, r.x1, r.y1] } as const;
+      for (const [side, [x0, y0, x1, y1]] of Object.entries(sides)) {
+        if (c.kind === "lift" && side === c.doorSide) {
+          const vertical = side === "east" || side === "west";
+          const mid = vertical ? (r.y0 + r.y1) / 2 : (r.x0 + r.x1) / 2;
+          const half = 450;
+          if (vertical) {
+            add(x0, y0, z0, x1, mid - half, z1, "wall", li);
+            add(x0, mid + half, z0, x1, y1, z1, "wall", li);
+            add(x0, mid - half, z0 + 2100, x1, mid + half, z1, "wall", li);
+            add(x0 + t / 2 - 20, mid - half, z0, x0 + t / 2 + 20, mid + half, z0 + 2100, "frame", li);
+          } else {
+            add(x0, y0, z0, mid - half, y1, z1, "wall", li);
+            add(mid + half, y0, z0, x1, y1, z1, "wall", li);
+            add(mid - half, y0, z0 + 2100, mid + half, y1, z1, "wall", li);
+            add(mid - half, y0 + t / 2 - 20, z0, mid + half, y0 + t / 2 + 20, z0 + 2100, "frame", li);
+          }
+        } else add(x0, y0, z0, x1, y1, z1, "wall", li);
+      }
+      // Overrun above the top stop
+      if (c.toLevel === level.id && c.kind === "lift") add(r.x0, r.y0, z1, r.x1, r.y1, z1 + 1200, "accent", li);
+    }
+
+    // Columns stand free on open stilt floors
+    if (level.kind === "stilt") for (const col of columnsOn(project, level.id)) {
+      const r = columnRect(col);
+      add(r.x0, r.y0, z0, r.x1, r.y1, z1 - slab, "wall", li);
     }
 
     // Furniture as blocks at catalogue height (flat items get a thin slab)

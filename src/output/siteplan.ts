@@ -8,7 +8,7 @@ import type { Rect } from "../model/geometry.js";
 import type { Project } from "../model/schema.js";
 import { sqmToSqft } from "../model/units.js";
 import { zoneFrame } from "../model/zones.js";
-import { drawStair, drawStructure, drawTree, sheetFrame, SMALL, TEXT, type Frame } from "./frame.js";
+import { drawCores, drawStair, drawStructure, drawTree, sheetFrame, SMALL, TEXT, type Frame } from "./frame.js";
 import type { Pt, Sheet } from "./sheet.js";
 
 export function siteplanSheet(project: Project): Sheet {
@@ -30,6 +30,7 @@ export function siteplanSheet(project: Project): Sheet {
   });
   if (project.prefs.vastu !== "off") drawZones(fr, project);
   for (const s of project.stairs.filter((s) => s.fromLevel === lowest?.id)) drawStair(fr, project, s, "UP");
+  drawCores(fr, project, null);
   drawStructure(fr, project, null);
 
   // Area statement under the plot

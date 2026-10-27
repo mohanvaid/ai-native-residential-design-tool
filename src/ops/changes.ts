@@ -4,7 +4,7 @@
  * "what did the AI change?" and, reversed, the undo.
  */
 import { catalogueItem } from "../catalogue/catalogue.js";
-import type { Column, Level, Opening, PlacedItem, Plot, Project, Room, Stair, Tree } from "../model/schema.js";
+import type { Column, Core, Level, MepPoint, Opening, PlacedItem, Plot, Project, Room, Stair, Tree } from "../model/schema.js";
 
 /** Element collections on the project, by change kind. */
 interface Elements {
@@ -14,9 +14,11 @@ interface Elements {
   column: Column;
   stair: Stair;
   item: PlacedItem;
+  core: Core;
+  mep: MepPoint;
 }
 export type ElementKind = keyof Elements;
-const COLLECTION = { room: "rooms", opening: "openings", tree: "trees", column: "columns", stair: "stairs", item: "items" } as const satisfies Record<ElementKind, keyof Project>;
+const COLLECTION = { room: "rooms", opening: "openings", tree: "trees", column: "columns", stair: "stairs", item: "items", core: "cores", mep: "mep" } as const satisfies Record<ElementKind, keyof Project>;
 const ELEMENT_KINDS = Object.keys(COLLECTION) as ElementKind[];
 
 type ElementChange = { [K in ElementKind]: { kind: K; id: string; before: Elements[K] | null; after: Elements[K] | null } }[ElementKind];
@@ -51,6 +53,8 @@ export class Draft {
     column: new Map(),
     stair: new Map(),
     item: new Map(),
+    core: new Map(),
+    mep: new Map(),
   };
   private levelsBefore: Level[] | null = null;
   private plotBefore: Plot | null = null;
@@ -207,13 +211,17 @@ function upsert<T extends { id: string }>(list: T[], id: string, target: T | nul
 export function describeChanges(changes: ChangeSet): string[] {
   const columns = changes.filter((c) => c.kind === "column");
   const bulk = columns.length > 3;
-  const lines = changes.filter((c) => !(bulk && c.kind === "column")).map((c) => {
+  const mep = changes.filter((c) => c.kind === "mep");
+  const bulkMep = mep.length > 3;
+  const lines = changes.filter((c) => !(bulk && c.kind === "column") && !(bulkMep && c.kind === "mep")).map((c) => {
     const name = (v: unknown) => {
       if (!v || typeof v !== "object") return c.id;
       if ("name" in v && v.name) return String(v.name);
       if ("host" in v && "type" in v) return `${v.type} (${c.id})`;
       if ("species" in v) return String(v.species);
       if ("catalogue" in v) return `${catalogueItem(String(v.catalogue))?.name.toLowerCase() ?? v.catalogue} (${c.id})`;
+      if (c.kind === "core" && "kind" in v) return `${v.kind} (${c.id})`;
+      if (c.kind === "mep" && "kind" in v) return `${v.kind} point (${c.id})`;
       return c.id;
     };
     if (c.kind === "levels") return "Levels updated";
@@ -228,6 +236,12 @@ export function describeChanges(changes: ChangeSet): string[] {
     const removed = columns.filter((c) => !c.after).length;
     const changed = columns.length - added - removed;
     lines.push(`Columns: ${[added && `${added} added`, removed && `${removed} removed`, changed && `${changed} changed`].filter(Boolean).join(", ")}`);
+  }
+  if (bulkMep) {
+    const added = mep.filter((c) => !c.before).length;
+    const removed = mep.filter((c) => !c.after).length;
+    const changed = mep.length - added - removed;
+    lines.push(`Electrical and plumbing points: ${[added && `${added} added`, removed && `${removed} removed`, changed && `${changed} changed`].filter(Boolean).join(", ")}`);
   }
   return lines;
 }

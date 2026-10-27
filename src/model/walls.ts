@@ -45,7 +45,8 @@ export function deriveWalls(project: Project, levelId: string): Wall[] {
   const lines = new Map<string, { orient: "h" | "v"; at: number; refs: SideRef[] }>();
 
   for (const room of project.rooms) {
-    if (room.level !== levelId) continue;
+    // Open stilt parking has columns, not walls
+    if (room.level !== levelId || room.type === "parking") continue;
     const rect = boundaryToRect(room.boundary);
     if (!rect) continue;
     for (const side of SIDES) {

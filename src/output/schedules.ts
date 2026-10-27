@@ -8,6 +8,7 @@ import { boundaryToRect, rectArea, rectDepth, rectWidth } from "../model/geometr
 import type { Project } from "../model/schema.js";
 import { formatFtIn, sqmToSqft } from "../model/units.js";
 import { clearRect, deriveWalls } from "../model/walls.js";
+import { areaStatement } from "../model/flats.js";
 import { titleBlock, SMALL, TEXT } from "./frame.js";
 import { openingSchedule } from "./schedule.js";
 import type { Item, Sheet } from "./sheet.js";
@@ -106,6 +107,22 @@ export function furnitureTable(project: Project): Table {
       const price = cat.priceInr[1] ? `${cat.priceInr[0].toLocaleString("en-IN")}–${cat.priceInr[1].toLocaleString("en-IN")}` : "—";
       return [[level, room.name, cat.name, `${formatFtIn(cat.width)} × ${formatFtIn(cat.depth)}`, price]];
     }),
+  };
+}
+
+const sqftText = (sqm: number) => `${Math.round(sqmToSqft(sqm)).toLocaleString("en-IN")} sq ft`;
+
+/** Area statement: carpet, built-up, common share and super built-up per flat. */
+export function areaStatementTable(project: Project): Table {
+  const st = areaStatement(project);
+  const rows = st.flats.map((f) => [f.flat, f.levels.join(", "), `${f.bedrooms} BR, ${f.rooms} rooms`, sqftText(f.carpetSqm), sqftText(f.builtUpSqm), sqftText(f.commonShareSqm), sqftText(f.superBuiltUpSqm)]);
+  const sum = (k: "carpetSqm" | "builtUpSqm" | "commonShareSqm" | "superBuiltUpSqm") => st.flats.reduce((s, f) => s + f[k], 0);
+  if (st.flats.length > 1) rows.push(["Total", "", "", sqftText(sum("carpetSqm")), sqftText(sum("builtUpSqm")), sqftText(sum("commonShareSqm")), sqftText(sum("superBuiltUpSqm"))]);
+  return {
+    title: "Area statement",
+    head: ["Flat", "Floor", "Rooms", "Carpet", "Built-up", "Common share", "Super built-up"],
+    numeric: [3, 4, 5, 6],
+    rows,
   };
 }
 
