@@ -174,3 +174,6 @@ export const REF_PARKING: OpInput[] = [
 
 /** Columns at every wall corner and junction from the stilt up. */
 export const REF_STRUCTURE: OpInput[] = [{ op: "PlaceColumns", args: { fromLevel: "lv_gf", toLevel: "lv_tr" } }];
+
+/** Electrical and plumbing points laid out from the rooms. */
+export const REF_SERVICES: OpInput[] = [{ op: "AutoPlaceMep", args: {} }];

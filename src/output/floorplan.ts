@@ -5,13 +5,14 @@
  * face) in ft-in, areas in sq ft and m², as Chennai clients read them.
  */
 import { boundaryToRect, OUTWARD, rectArea, rectDepth, rectWidth, type Rect } from "../model/geometry.js";
-import type { Project, RoomType } from "../model/schema.js";
+import type { MepKind, Project, Room, RoomType } from "../model/schema.js";
 import { formatFtIn, sqmToSqft } from "../model/units.js";
 import { clearRect, deriveWalls, resolveOpening, type ResolvedOpening, type Wall } from "../model/walls.js";
 import { catalogueItem } from "../catalogue/catalogue.js";
 import { itemRect } from "../model/furnishing.js";
 import { drawPlacedItem } from "./symbols.js";
-import { drawCores, drawStair, drawStructure, drawTree, sheetFrame, SMALL, TEXT } from "./frame.js";
+import { drawCores, drawStair, drawStructure, drawTree, sheetFrame, SMALL, TEXT, type Frame } from "./frame.js";
+import { ELECTRICAL, MEP_LABELS, PLUMBING, STANDARD_HEIGHT } from "../model/mep.js";
 import { coreRect, coresOn } from "../model/core.js";
 import { sheetsToPdf, type Paper } from "./pdf.js";
 import { marksById } from "./schedule.js";
@@ -38,6 +39,8 @@ const ROOM_FILL: Partial<Record<RoomType, string>> = {
 export interface FloorPlanOptions {
   /** Draw the setback line from the first applicable rule pack. Default true. */
   showSetbacks?: boolean;
+  /** An electrical or plumbing layout instead of the furnished plan. */
+  layer?: "electrical" | "plumbing";
 }
 
 export function floorPlanSheet(project: Project, levelId: string, opts: FloorPlanOptions = {}): Sheet {
@@ -61,10 +64,10 @@ export function floorPlanSheet(project: Project, levelId: string, opts: FloorPla
   // Room fills
   for (const room of rooms) items.push({ kind: "rect", ...box(clearRect(walls, room)), fill: ROOM_FILL[room.type] ?? "#f4f4f4" });
 
-  // Furniture, fixtures and vehicles
+  // Furniture, fixtures and vehicles (only fixtures that need services on a layout sheet)
   for (const it of project.items) {
     const cat = catalogueItem(it.catalogue);
-    if (cat && rooms.some((r) => r.id === it.room)) drawPlacedItem(fr, it, cat);
+    if (cat && rooms.some((r) => r.id === it.room) && (!opts.layer || cat.services?.length)) drawPlacedItem(fr, it, cat);
   }
 
   // Walls, with gaps at openings
@@ -126,6 +129,8 @@ export function floorPlanSheet(project: Project, levelId: string, opts: FloorPla
   // Columns and grid
   drawStructure(fr, project, levelId);
 
+  if (opts.layer) drawMep(fr, project, rooms, opts.layer);
+
   // Room tags
   const obstacles = [
     ...project.stairs.filter((st) => st.fromLevel === levelId || st.toLevel === levelId).map((st) => boundaryToRect(st.boundary)),
@@ -158,7 +163,61 @@ export function floorPlanSheet(project: Project, levelId: string, opts: FloorPla
     dimension(items, P(xChain - 450, ys[0]!), P(xChain - 450, ys[ys.length - 1]!), formatFtIn(ys[ys.length - 1]! - ys[0]!));
   }
 
+  if (opts.layer === "electrical") return fr.finish(`${level.name} electrical layout`, "Points are indicative, for the electrical consultant to design circuits, cable sizes and earthing (IS 732). Heights are above finished floor.");
+  if (opts.layer === "plumbing") return fr.finish(`${level.name} plumbing layout`, "Points and stacks are indicative, for the plumbing consultant to size pipes and falls (NBC 2016 Part 9). Dashed lines show which stack each point drains to.");
   return fr.finish(`${level.name} floor plan`, "Room sizes are clear internal dimensions; areas are carpet. Not for construction until signed off by a registered professional.");
+}
+
+const MEP_CODE: Record<MepKind, string> = {
+  light: "L",
+  fan: "F",
+  switchboard: "SB",
+  "socket-6a": "6A",
+  "socket-16a": "16A",
+  ac: "AC",
+  tv: "TV",
+  data: "D",
+  exhaust: "EF",
+  geyser: "G",
+  db: "DB",
+  "water-cold": "CW",
+  "water-hot": "HW",
+  drain: "WO",
+  "floor-trap": "FT",
+  "wc-outlet": "WC",
+  stack: "SP",
+};
+
+const MEP_COLOUR = (k: MepKind) => (k === "water-hot" ? "#c0392b" : k === "water-cold" ? "#1f5fa8" : PLUMBING.has(k) ? "#6d4c41" : "#d35400");
+
+/** Electrical or plumbing symbols, plumbing runs to their stacks, and a legend. */
+function drawMep(fr: Frame, project: Project, rooms: Room[], layer: "electrical" | "plumbing"): void {
+  const ids = new Set(rooms.map((r) => r.id));
+  const set = layer === "electrical" ? ELECTRICAL : PLUMBING;
+  const pts = project.mep.filter((p) => ids.has(p.room) && set.has(p.kind));
+  if (layer === "plumbing")
+    for (const p of pts) {
+      const st = p.stack ? project.mep.find((s) => s.id === p.stack) : undefined;
+      if (st) fr.items.push({ kind: "line", a: fr.P(p.at[0], p.at[1]), b: fr.P(st.at[0], st.at[1]), stroke: MEP_COLOUR(p.kind), sw: 12, dash: [120, 80] });
+    }
+  for (const p of pts) {
+    const c = fr.P(p.at[0], p.at[1]);
+    const colour = MEP_COLOUR(p.kind);
+    if (p.kind === "stack") fr.items.push({ kind: "circle", c, r: 160, fill: colour, stroke: "#000", sw: 10 });
+    else if (p.kind === "db" || p.kind === "switchboard") fr.items.push({ kind: "rect", x: c[0] - 200, y: c[1] - 110, w: 400, h: 220, fill: "#ffffff", stroke: colour, sw: 18 });
+    else fr.items.push({ kind: "circle", c, r: p.kind === "light" || p.kind === "fan" ? 190 : 150, fill: "#ffffff", stroke: colour, sw: 18 });
+    fr.items.push({ kind: "text", at: [c[0], c[1] + 45], text: MEP_CODE[p.kind], size: 120, bold: true, fill: p.kind === "stack" ? "#ffffff" : colour });
+  }
+  // Legend down the right margin
+  const kinds = [...set].filter((k) => pts.some((p) => p.kind === k));
+  const x = fr.X(fr.plot.x1) + 400;
+  kinds.forEach((k, i) => {
+    const y = fr.Y(fr.plot.y1) + 400 + i * 380;
+    const n = pts.filter((p) => p.kind === k).length;
+    fr.items.push({ kind: "circle", c: [x, y], r: 150, fill: k === "stack" ? MEP_COLOUR(k) : "#ffffff", stroke: MEP_COLOUR(k), sw: 18 });
+    fr.items.push({ kind: "text", at: [x, y + 45], text: MEP_CODE[k], size: 110, bold: true, fill: k === "stack" ? "#ffffff" : MEP_COLOUR(k) });
+    fr.items.push({ kind: "text", at: [x + 260, y + 60], text: `${MEP_LABELS[k]} × ${n}${k === "stack" ? "" : `, ${STANDARD_HEIGHT[k] ? `${STANDARD_HEIGHT[k]} AFF` : k === "light" || k === "fan" ? "ceiling" : "floor"}`}`, size: SMALL, align: "start" });
+  });
 }
 
 /** The floor plan as SVG sized to print at 1:100. */

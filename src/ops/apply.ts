@@ -16,7 +16,8 @@ import { catalogueItem, FINISH_CATEGORIES, type Category, type CatalogueItem } f
 import { rateFor } from "../cost/rates.js";
 import { itemRect, placeItem } from "../model/furnishing.js";
 import { INTERIOR_THEMES, interiorTheme, themeFinishes } from "../model/themes.js";
-import { Column, Core, Level, Opening, PlacedItem, Room, Stair, Tree, type OpeningType, type Side } from "../model/schema.js";
+import { assignCircuits, boardPoints, linkStacks, roomPoints, STANDARD_HEIGHT, type MepDraft } from "../model/mep.js";
+import { Column, Core, Level, MepPoint, Opening, PlacedItem, Room, Stair, Tree, type OpeningType, type Side } from "../model/schema.js";
 import { DEFAULT_MAX_RISER_MM, levelIndex, proposeColumns, stairWellRect, stairWellSize, TREE_DEFAULTS, TREE_FALLBACK } from "../model/structure.js";
 import { deriveWalls, roomRect } from "../model/walls.js";
 import { zoneOf } from "../model/zones.js";
@@ -499,6 +500,48 @@ export function applyOp(draft: Draft, op: Op, opIndex: number): void {
       return;
     }
 
+    case "AutoPlaceMep": {
+      const rooms = op.args.rooms ? op.args.rooms.map((id) => draft.requireRoom(id)) : draft.project.rooms;
+      const ids = new Set(rooms.map((r) => r.id));
+      for (const pt of draft.project.mep.filter((pt) => pt.auto && ids.has(pt.room))) draft.remove("mep", pt.id);
+      const walls = new Map<string, ReturnType<typeof deriveWalls>>();
+      const fresh: MepDraft[] = [];
+      for (const room of rooms) {
+        if (!walls.has(room.level)) walls.set(room.level, deriveWalls(draft.project, room.level));
+        fresh.push(...roomPoints(draft.project, room, walls.get(room.level)));
+      }
+      fresh.push(...boardPoints(draft.project, [...draft.project.mep, ...fresh]));
+      for (const pt of fresh) draft.put("mep", MepPoint.parse({ ...pt, id: draft.nextId("mep"), meta }));
+      relinkMep(draft);
+      return;
+    }
+
+    case "AddMepPoint": {
+      const a = op.args;
+      const room = draft.requireRoom(a.room);
+      const id = a.id ?? draft.nextId("mep");
+      if (draft.project.mep.some((p) => p.id === id)) throw new OpError(`Point id "${id}" already exists.`, "mep.duplicate");
+      draft.put("mep", MepPoint.parse({ id, kind: a.kind, room: room.id, at: [a.x, a.y], heightMm: a.heightMm ?? STANDARD_HEIGHT[a.kind], circuit: a.circuit, auto: false, meta }));
+      relinkMep(draft);
+      return;
+    }
+
+    case "MoveMepPoint": {
+      const pt = draft.project.mep.find((p) => p.id === op.target);
+      if (!pt) throw new OpError(`There is no electrical or plumbing point "${op.target}".`, "mep.missing");
+      const a = op.args;
+      draft.put("mep", { ...pt, at: [pt.at[0] + (a.dx ?? 0), pt.at[1] + (a.dy ?? 0)], heightMm: a.heightMm ?? pt.heightMm, circuit: a.circuit ?? pt.circuit, auto: false });
+      relinkMep(draft);
+      return;
+    }
+
+    case "RemoveMepPoint": {
+      if (!draft.project.mep.some((p) => p.id === op.target)) throw new OpError(`There is no electrical or plumbing point "${op.target}".`, "mep.missing");
+      draft.remove("mep", op.target);
+      relinkMep(draft);
+      return;
+    }
+
     case "AlignElements": {
       const { targets, to, edge } = op.args;
       const ref = elementRect(draft, to);
@@ -623,6 +666,15 @@ export function applyOp(draft: Draft, op: Op, opIndex: number): void {
       draft.setPlot(sides.length ? { ...plot, compoundWall: { sides: [...new Set(sides)], heightMm: heightMm ?? old?.heightMm ?? 1800 } } : plot);
       return;
     }
+  }
+}
+
+/** Re-assigns circuits and stacks after points change; only points whose circuit or stack actually changes are touched. */
+function relinkMep(draft: Draft): void {
+  const linked = linkStacks(draft.project, assignCircuits(draft.project, draft.project.mep));
+  for (const p of linked) {
+    const was = draft.project.mep.find((x) => x.id === p.id)!;
+    if (was.circuit !== p.circuit || was.stack !== p.stack) draft.put("mep", p);
   }
 }
 

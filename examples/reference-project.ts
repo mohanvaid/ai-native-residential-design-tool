@@ -7,8 +7,8 @@
  *   npm run reference
  */
 import { mkdirSync, writeFileSync } from "node:fs";
-import { areaStatementTable, boqTable, buildScene, Design, flatCostTable, renderDrawingSetPdf, renderFloorPlanSvg, renderViewer3dHtml, renderViewerHtml, sceneToGlb, tablesToCsv, computeBoq, type OpInput } from "../src/index.js";
-import { REF_BUILDING, REF_PARKING, REF_SITE, REF_STRUCTURE, referenceFlats, referencePlot } from "../src/templates/reference-project.js";
+import { areaStatementTable, boqTable, circuitTable, electricalTable, plumbingTable, buildScene, Design, flatCostTable, renderDrawingSetPdf, renderFloorPlanSvg, renderViewer3dHtml, renderViewerHtml, sceneToGlb, tablesToCsv, computeBoq, type OpInput } from "../src/index.js";
+import { REF_BUILDING, REF_PARKING, REF_SERVICES, REF_SITE, REF_STRUCTURE, referenceFlats, referencePlot } from "../src/templates/reference-project.js";
 
 const design = new Design("reference", "Stilt + 3, 62'6\" × 52' North", referencePlot());
 const store = design.store;
@@ -25,12 +25,16 @@ step("Stilt + 3: stair, lobby and lift, and the client's 3-bedroom plan on each 
 step("One flat per floor; stair and lobby are common", referenceFlats(store.current));
 step("Park three cars on the stilt", REF_PARKING);
 step("Frame it", REF_STRUCTURE);
+step("Lay out the electrical and plumbing points", REF_SERVICES);
 design.tag("Reference scheme");
 
 const p = store.current;
 const out = "out/reference";
 mkdirSync(out, { recursive: true });
-for (const level of p.levels) writeFileSync(`${out}/plan-${level.id}.svg`, renderFloorPlanSvg(p, level.id));
+for (const level of p.levels) {
+  writeFileSync(`${out}/plan-${level.id}.svg`, renderFloorPlanSvg(p, level.id));
+  if (level.kind === "floor") for (const layer of ["electrical", "plumbing"] as const) writeFileSync(`${out}/${layer}-${level.id}.svg`, renderFloorPlanSvg(p, level.id, { layer }));
+}
 writeFileSync(`${out}/model.json`, JSON.stringify(p, null, 2));
 writeFileSync(`${out}/drawings.pdf`, renderDrawingSetPdf(p));
 writeFileSync(`${out}/viewer.html`, renderViewerHtml(p));
@@ -38,6 +42,7 @@ writeFileSync(`${out}/3d.html`, renderViewer3dHtml(p));
 writeFileSync(`${out}/model.glb`, sceneToGlb(buildScene(p)));
 const boq = computeBoq(p);
 writeFileSync(`${out}/areas-and-cost.csv`, tablesToCsv([areaStatementTable(p), flatCostTable(p, boq), boqTable(p)]));
+writeFileSync(`${out}/services.csv`, tablesToCsv([electricalTable(p), circuitTable(p), plumbingTable(p)]));
 
 console.log("\nArea statement:");
 for (const row of areaStatementTable(p).rows) console.log(`  ${row.join("  ")}`);

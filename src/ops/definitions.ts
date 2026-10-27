@@ -5,7 +5,7 @@
  * (ft-in → mm) happens in the compiler, before ops are emitted.
  */
 import { z } from "zod";
-import { OpeningType, RoomType, Side } from "../model/schema.js";
+import { MepKind, OpeningType, RoomType, Side } from "../model/schema.js";
 
 const mm = z.number().int();
 const positiveMm = mm.positive();
@@ -443,6 +443,37 @@ export const AlignElements = z.object({
   reason,
 });
 
+export const AutoPlaceMep = z.object({
+  op: z.literal("AutoPlaceMep"),
+  args: z.object({
+    rooms: z.array(z.string()).optional().describe("Only these rooms; default every room."),
+  }),
+  reason,
+});
+
+export const AddMepPoint = z.object({
+  op: z.literal("AddMepPoint"),
+  args: z.object({
+    id: z.string().optional(),
+    kind: MepKind,
+    room: z.string(),
+    x: mm,
+    y: mm,
+    heightMm: mm.nonnegative().optional().describe("Above finished floor; default the standard height for the kind."),
+    circuit: z.string().optional(),
+  }),
+  reason,
+});
+
+export const MoveMepPoint = z.object({
+  op: z.literal("MoveMepPoint"),
+  target: z.string(),
+  args: z.object({ dx: mm.optional(), dy: mm.optional(), heightMm: mm.nonnegative().optional(), circuit: z.string().optional() }),
+  reason,
+});
+
+export const RemoveMepPoint = z.object({ op: z.literal("RemoveMepPoint"), target: z.string(), reason });
+
 export const Op = z.discriminatedUnion("op", [
   SetPlot,
   SetRoad,
@@ -486,6 +517,10 @@ export const Op = z.discriminatedUnion("op", [
   MergeRooms,
   SplitRoom,
   AlignElements,
+  AutoPlaceMep,
+  AddMepPoint,
+  MoveMepPoint,
+  RemoveMepPoint,
 ]);
 export type Op = z.infer<typeof Op>;
 /** An op as the compiler emits it, before defaults are filled in. */
@@ -545,4 +580,8 @@ const DESCRIPTIONS: Record<OpName, string> = {
   MergeRooms: "Merge rooms that together make a rectangle into one, removing the walls between them.",
   SplitRoom: "Split a room in two with a new wall, optionally with a door in it.",
   AlignElements: "Move rooms or items so an edge or centre line lines up with another room or item.",
+  AutoPlaceMep: "Lay out electrical and plumbing points (lights, fans, switchboards, sockets, AC, TV, water, drains, traps, stacks, distribution boards) from room types and placed items, replacing earlier automatic points; points placed by hand stay.",
+  AddMepPoint: "Add one electrical or plumbing point.",
+  MoveMepPoint: "Move an electrical or plumbing point, change its height or circuit.",
+  RemoveMepPoint: "Remove an electrical or plumbing point.",
 };

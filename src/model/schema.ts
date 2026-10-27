@@ -277,6 +277,8 @@ export const MepPoint = z.object({
   stack: z.string().optional(),
   /** The placed item this point serves, if any. */
   serves: z.string().optional(),
+  /** Placed by AutoPlaceMep, which may replace it; false for points placed by hand. */
+  auto: z.boolean().default(false),
   meta: Meta,
 });
 export type MepPoint = z.infer<typeof MepPoint>;

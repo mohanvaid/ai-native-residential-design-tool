@@ -5,10 +5,11 @@
  */
 import { catalogueItem, defaultFloorFinish } from "../catalogue/catalogue.js";
 import { boundaryToRect, rectArea, rectDepth, rectWidth } from "../model/geometry.js";
-import type { Project } from "../model/schema.js";
+import type { MepKind, MepPoint, Project } from "../model/schema.js";
 import { formatFtIn, sqmToSqft } from "../model/units.js";
 import { clearRect, deriveWalls } from "../model/walls.js";
 import { areaStatement } from "../model/flats.js";
+import { MEP_LABELS } from "../model/mep.js";
 import { titleBlock, SMALL, TEXT } from "./frame.js";
 import { openingSchedule } from "./schedule.js";
 import type { Item, Sheet } from "./sheet.js";
@@ -208,4 +209,44 @@ export function scheduleSheets(project: Project, tables: Table[] = [doorWindowTa
   }
   if (items.length) flush();
   return sheets;
+}
+
+/** Electrical points per room, by kind. */
+export function electricalTable(project: Project): Table {
+  const kinds: MepKind[] = ["light", "fan", "switchboard", "socket-6a", "socket-16a", "ac", "tv", "data", "exhaust", "geyser", "db"];
+  return mepTable(project, "Electrical schedule", kinds, ["Lights", "Fans", "Switch-boards", "6 A", "16 A", "AC", "TV", "Data", "Exhaust", "Geyser", "DB"]);
+}
+
+/** Plumbing points per room, by kind, and the stacks they drain to. */
+export function plumbingTable(project: Project): Table {
+  const kinds: MepKind[] = ["water-cold", "water-hot", "drain", "floor-trap", "wc-outlet", "stack"];
+  return mepTable(project, "Plumbing schedule", kinds, ["Cold water", "Hot water", "Waste outlets", "Floor traps", "WC outlets", "Stacks"]);
+}
+
+function mepTable(project: Project, title: string, kinds: MepKind[], labels: string[]): Table {
+  const rows: string[][] = [];
+  const totals = kinds.map(() => 0);
+  for (const level of project.levels)
+    for (const room of project.rooms.filter((r) => r.level === level.id)) {
+      const counts = kinds.map((k) => project.mep.filter((p) => p.room === room.id && p.kind === k).length);
+      if (!counts.some(Boolean)) continue;
+      counts.forEach((n, i) => (totals[i]! += n));
+      rows.push([level.name, room.flat ? `${room.name} (${room.flat})` : room.name, ...counts.map((n) => (n ? String(n) : "—"))]);
+    }
+  rows.push(["", "Total", ...totals.map(String)]);
+  return { title, head: ["Floor", "Room", ...labels], numeric: kinds.map((_, i) => i + 2), rows };
+}
+
+/** Final circuits with their point counts and rooms. */
+export function circuitTable(project: Project): Table {
+  const by = new Map<string, MepPoint[]>();
+  for (const p of project.mep) if (p.circuit) by.set(p.circuit, [...(by.get(p.circuit) ?? []), p]);
+  const rows = [...by.entries()]
+    .sort(([a], [b]) => a.localeCompare(b, "en", { numeric: true }))
+    .map(([c, pts]) => {
+      const rooms = [...new Set(pts.map((p) => project.rooms.find((r) => r.id === p.room)?.name ?? p.room))];
+      const kinds = [...new Set(pts.map((p) => MEP_LABELS[p.kind].toLowerCase()))];
+      return [c, String(pts.length), kinds.join(", "), rooms.join(", ")];
+    });
+  return { title: "Circuit schedule", head: ["Circuit", "Points", "Serves", "Rooms"], numeric: [1], rows };
 }
