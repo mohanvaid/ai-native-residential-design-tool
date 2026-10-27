@@ -21,6 +21,7 @@ import { Column, Core, Level, MepPoint, Opening, PlacedItem, Room, Stair, Tree, 
 import { DEFAULT_MAX_RISER_MM, levelIndex, proposeColumns, stairWellRect, stairWellSize, TREE_DEFAULTS, TREE_FALLBACK } from "../model/structure.js";
 import { deriveWalls, roomRect } from "../model/walls.js";
 import { zoneOf } from "../model/zones.js";
+import { RULE_PACKS } from "../rules/registry.js";
 import { Draft, OpError } from "./changes.js";
 import type { Op } from "./definitions.js";
 
@@ -497,6 +498,17 @@ export function applyOp(draft: Draft, op: Op, opIndex: number): void {
         if (width >= 600)
           draft.putOpening(Opening.parse({ id: draft.nextId("op"), type: "door", host: { room: room.id, side: farSide }, offset: Math.round((len - width) / 2), ...OPENING_DEFAULTS.door, width, swing: { hinge: "start", into: "host" }, meta }));
       }
+      return;
+    }
+
+    case "SetRuleProfile": {
+      const a = op.args;
+      if (a.ruleSets) {
+        const unknown = a.ruleSets.filter((id) => !RULE_PACKS.some((p) => p.id === id));
+        if (unknown.length) throw new OpError(`There is no rule pack "${unknown[0]}". Known packs: ${RULE_PACKS.map((p) => p.id).join(", ")}.`, "rulepack.unknown");
+      }
+      draft.setRules({ jurisdiction: a.jurisdiction, ruleSets: a.ruleSets });
+      if (a.vastu) draft.setPrefs({ ...draft.project.prefs, vastu: a.vastu });
       return;
     }
 

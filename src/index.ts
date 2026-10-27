@@ -44,6 +44,6 @@ export * from "./output/raster.js";
 export * from "./output/overlay.js";
 export * from "./output/details.js";
 export * from "./output/schedule.js";
-export { DesignAgent, anthropicMessages, DEFAULT_MODEL, type MessagesApi, type TurnResult, type AgentOptions } from "./agent/agent.js";
+export { DesignAgent, anthropicMessages, describeOutput, resolveReference, DEFAULT_MODEL, type MessagesApi, type Reference, type TurnResult, type AgentOptions } from "./agent/agent.js";
 export { modelSummary, trueFacing } from "./agent/summary.js";
 export { changeSummary, revisionLabel } from "./agent/report.js";

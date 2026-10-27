@@ -163,7 +163,7 @@ describe("DesignAgent", () => {
   });
 
   it("exposes tools with plain JSON Schemas", () => {
-    expect(TOOLS.map((t) => t.name)).toEqual(["apply_edits", "query_model", "undo_last_request"]);
+    expect(TOOLS.map((t) => t.name)).toEqual(["apply_edits", "query_model", "resolve_reference", "run_checks", "generate", "version", "undo_last_request"]);
     for (const t of TOOLS) expect(t.input_schema).not.toHaveProperty("$schema");
     expect(JSON.stringify(TOOLS[0]!.input_schema)).toContain("ResizeRoom");
   });

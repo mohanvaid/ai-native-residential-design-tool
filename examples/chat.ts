@@ -32,7 +32,8 @@ else {
   design.store.commit(DEMO_GROUND_FLOOR, { label: "Ground floor from the 1BHK template" });
   repo.save(design);
 }
-let agent = new DesignAgent(design.store);
+// The agent is given the whole design, so its version tool can list, tag, branch and compare
+let agent = new DesignAgent(design);
 
 function writePlans(): void {
   const p = design.store.current;
@@ -64,13 +65,11 @@ function command(line: string): boolean {
       if (!args[0]) throw new Error("Usage: /branch <name> [from-ref]");
       const from = args[1] ? design.resolve(args[1]) : undefined;
       design.createBranch(args[0], from && { branch: from.branch, version: from.version });
-      agent = new DesignAgent(design.store);
       console.log(`Now on ${where()}.`);
       return true;
     }
     case "switch":
       design.switchTo(args[0] ?? "main");
-      agent = new DesignAgent(design.store);
       console.log(`Now on ${where()}.`);
       return true;
     case "tag":

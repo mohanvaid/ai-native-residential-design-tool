@@ -52,6 +52,7 @@ export function affectedOutputs(before: Project, after: Project, changes: Change
     switch (c.kind) {
       case "levels":
       case "plot":
+      case "rules":
         all();
         break;
       case "prefs": {

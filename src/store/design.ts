@@ -32,6 +32,8 @@ export interface Revision {
   label: string;
   at: string;
   tag?: string;
+  author?: string;
+  assumptions?: string[];
 }
 
 interface StoredEntry {
@@ -44,6 +46,8 @@ interface StoredEntry {
   seq: number;
   /** Present when the change set alone does not rebuild this version. */
   snapshot?: unknown;
+  author?: string;
+  assumptions?: string[];
 }
 
 export interface StoredBranch {
@@ -148,7 +152,7 @@ export class Design {
 
   revisions(branch = this.current): Revision[] {
     const b = this.branch(branch);
-    return b.store.versions.map((h) => ({ rev: revisionLabel(h.version), version: h.version, label: h.label, at: h.at, tag: b.tags.get(h.version) }));
+    return b.store.versions.map((h) => ({ rev: revisionLabel(h.version), version: h.version, label: h.label, at: h.at, tag: b.tags.get(h.version), author: h.author, assumptions: h.assumptions }));
   }
 
   /**
@@ -174,7 +178,7 @@ export class Design {
       const history: StoredEntry[] = [];
       let prev: Project | null = null;
       for (const h of b.store.versions) {
-        const entry: StoredEntry = { version: h.version, label: h.label, at: h.at, ops: h.ops, changes: h.changes, seq: h.project.seq };
+        const entry: StoredEntry = { version: h.version, label: h.label, at: h.at, ops: h.ops, changes: h.changes, seq: h.project.seq, ...(h.author ? { author: h.author } : {}), ...(h.assumptions?.length ? { assumptions: h.assumptions } : {}) };
         if (!prev || canonical(replay(prev, entry)) !== canonical(h.project)) entry.snapshot = h.project;
         history.push(entry);
         prev = h.project;
@@ -197,7 +201,7 @@ export class Design {
       for (const e of sb.history) {
         const project: Project = e.snapshot !== undefined ? Project.parse(e.snapshot) : prev ? replay(prev, e) : null!;
         if (!project) throw new Error(`Branch ${name} does not start with a snapshot.`);
-        history.push({ version: e.version, project, label: e.label, at: e.at, ops: e.ops.map((o) => Op.parse(o)), changes: e.changes });
+        history.push({ version: e.version, project, label: e.label, at: e.at, ops: e.ops.map((o) => Op.parse(o)), changes: e.changes, author: e.author, assumptions: e.assumptions });
         prev = project;
       }
       const store = ModelStore.fromHistory(history, sb.undoable);

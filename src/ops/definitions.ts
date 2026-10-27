@@ -5,7 +5,7 @@
  * (ft-in → mm) happens in the compiler, before ops are emitted.
  */
 import { z } from "zod";
-import { MepKind, OpeningType, RoomType, Side } from "../model/schema.js";
+import { Jurisdiction, MepKind, OpeningType, RoomType, Side } from "../model/schema.js";
 
 const mm = z.number().int();
 const positiveMm = mm.positive();
@@ -474,6 +474,16 @@ export const MoveMepPoint = z.object({
 
 export const RemoveMepPoint = z.object({ op: z.literal("RemoveMepPoint"), target: z.string(), reason });
 
+export const SetRuleProfile = z.object({
+  op: z.literal("SetRuleProfile"),
+  args: z.object({
+    jurisdiction: Jurisdiction.optional().describe("IN-TN-CMDA (Chennai metropolitan), IN-TN-DTCP (rest of Tamil Nadu) or NONE."),
+    ruleSets: z.array(z.string()).optional().describe("Rule pack ids to run; an empty list goes back to picking them from the jurisdiction."),
+    vastu: z.enum(["off", "prefer", "strict"]).optional(),
+  }),
+  reason,
+});
+
 export const Op = z.discriminatedUnion("op", [
   SetPlot,
   SetRoad,
@@ -521,6 +531,7 @@ export const Op = z.discriminatedUnion("op", [
   AddMepPoint,
   MoveMepPoint,
   RemoveMepPoint,
+  SetRuleProfile,
 ]);
 export type Op = z.infer<typeof Op>;
 /** An op as the compiler emits it, before defaults are filled in. */
@@ -584,4 +595,5 @@ const DESCRIPTIONS: Record<OpName, string> = {
   AddMepPoint: "Add one electrical or plumbing point.",
   MoveMepPoint: "Move an electrical or plumbing point, change its height or circuit.",
   RemoveMepPoint: "Remove an electrical or plumbing point.",
+  SetRuleProfile: "Choose which building rules apply: the jurisdiction, specific rule packs, and whether Vastu is checked.",
 };

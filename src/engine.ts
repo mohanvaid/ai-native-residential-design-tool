@@ -71,6 +71,17 @@ export interface VersionEntry {
   changes: ChangeSet;
   /** ISO time the version was made. */
   at: string;
+  /** Who made it: a member id, "claude", or undefined for older entries. */
+  author?: string;
+  /** What the agent assumed about the request when it made this revision. */
+  assumptions?: string[];
+}
+
+export interface CommitOptions {
+  label?: string;
+  acceptBlocking?: boolean;
+  author?: string;
+  assumptions?: string[];
 }
 
 /** In-memory version history for one project, with undo from the op log. */
@@ -114,7 +125,7 @@ export class ModelStore {
    * Commits when there are no blocking findings, or when the user has seen
    * them and confirmed (`acceptBlocking`).
    */
-  commit(ops: OpInput[], opts: { label?: string; acceptBlocking?: boolean } = {}): TransactionResult {
+  commit(ops: OpInput[], opts: CommitOptions = {}): TransactionResult {
     const result = dryRun(this.current, ops);
     if (result.status === "rejected") return result;
     if (result.status === "blocked" && !opts.acceptBlocking) return result;
@@ -126,6 +137,8 @@ export class ModelStore {
       ops: ops.map((o) => Op.parse(o)),
       changes: result.changes,
       at: new Date().toISOString(),
+      ...(opts.author ? { author: opts.author } : {}),
+      ...(opts.assumptions?.length ? { assumptions: opts.assumptions } : {}),
     };
     this.history.push(entry);
     this.undoable.push(entry);
