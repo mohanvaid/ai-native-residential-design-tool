@@ -39,8 +39,9 @@ describe("viewer", () => {
   it("is one self-contained file with every level, schedules and the PDF", () => {
     const html = renderViewerHtml(demo());
     expect(html).not.toMatch(/<(script|link|img)[^>]+(src|href)="https?:/);
-    // Site, two floors, four elevations and a section
-    expect(html.match(/<svg /g)).toHaveLength(8);
+    // Site, two floors, four elevations, a section and the wardrobe detail
+    expect(html.match(/<svg /g)).toHaveLength(9);
+    expect(html).toContain(">Detail 1</button>");
     expect(html).toContain(">Section</button>");
     expect(html).toContain(">Site</button>");
     expect(html).toContain(">Ground</button>");

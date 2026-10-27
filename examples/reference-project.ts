@@ -7,7 +7,7 @@
  *   npm run reference
  */
 import { mkdirSync, writeFileSync } from "node:fs";
-import { areaStatementTable, boqTable, circuitTable, electricalTable, plumbingTable, buildScene, Design, flatCostTable, renderDrawingSetPdf, renderFloorPlanSvg, renderViewer3dHtml, renderViewerHtml, sceneToGlb, tablesToCsv, computeBoq, type OpInput } from "../src/index.js";
+import { areaStatementTable, boqTable, circuitTable, detailSheets, electricalTable, floorPlanSheet, plumbingTable, sheetToDxf, sheetToPng, sheetToSvg, tablesToXlsx, buildScene, Design, flatCostTable, renderDrawingSetPdf, renderFloorPlanSvg, renderViewer3dHtml, renderViewerHtml, sceneToGlb, tablesToCsv, computeBoq, type OpInput } from "../src/index.js";
 import { REF_BUILDING, REF_PARKING, REF_SERVICES, REF_SITE, REF_STRUCTURE, referenceFlats, referencePlot } from "../src/templates/reference-project.js";
 
 const design = new Design("reference", "Stilt + 3, 62'6\" × 52' North", referencePlot());
@@ -43,9 +43,13 @@ writeFileSync(`${out}/model.glb`, sceneToGlb(buildScene(p)));
 const boq = computeBoq(p);
 writeFileSync(`${out}/areas-and-cost.csv`, tablesToCsv([areaStatementTable(p), flatCostTable(p, boq), boqTable(p)]));
 writeFileSync(`${out}/services.csv`, tablesToCsv([electricalTable(p), circuitTable(p), plumbingTable(p)]));
+writeFileSync(`${out}/schedules.xlsx`, tablesToXlsx([areaStatementTable(p), flatCostTable(p, boq), boqTable(p), electricalTable(p), circuitTable(p), plumbingTable(p)]));
+writeFileSync(`${out}/plan-first.dxf`, sheetToDxf(floorPlanSheet(p, "lv_l1")));
+writeFileSync(`${out}/preview.png`, sheetToPng(floorPlanSheet(p, "lv_l1"), { width: 1200 }));
+for (const [i, sheet] of detailSheets(p).slice(0, 4).entries()) writeFileSync(`${out}/detail-${i + 1}.svg`, sheetToSvg(sheet));
 
 console.log("\nArea statement:");
 for (const row of areaStatementTable(p).rows) console.log(`  ${row.join("  ")}`);
 console.log("\nFindings:");
 for (const f of store.commit([]).findings.filter((f) => f.severity !== "info")) console.log(`  [${f.severity}] ${f.message}`);
-console.log(`\nWrote ${out}/drawings.pdf, viewer.html, 3d.html, model.glb, plan SVGs and areas-and-cost.csv`);
+console.log(`\nWrote ${out}/drawings.pdf, viewer.html, 3d.html, model.glb, plan and layout SVGs, detail elevations, plan-first.dxf, schedules.xlsx, preview.png and the CSVs`);

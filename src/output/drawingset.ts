@@ -1,6 +1,7 @@
 /** The full drawing set, in sheet order: site plan, floor plans, elevations, section, schedules. */
 import { boqTable, flatCostTable } from "../cost/boq.js";
 import type { Project } from "../model/schema.js";
+import { detailSheets } from "./details.js";
 import { elevationSheets, sectionSheet } from "./elevation.js";
 import { floorPlanSheet, type FloorPlanOptions } from "./floorplan.js";
 import { sheetsToPdf, type Paper } from "./pdf.js";
@@ -25,6 +26,7 @@ export function drawingSet(project: Project, opts: FloorPlanOptions = {}): Drawi
     ]),
     ...elevations,
     { tab: "Section", sheet: sectionSheet(project) },
+    ...detailSheets(project).map((sheet, i) => ({ tab: `Detail ${i + 1}`, sheet })),
     ...scheduleSheets(project, [areaStatementTable(project), doorWindowTable(project), flooringTable(project), finishesTable(project), furnitureTable(project), ...(project.mep.length ? [electricalTable(project), circuitTable(project), plumbingTable(project)] : []), boqTable(project), ...(project.rooms.some((r) => r.flat) ? [flatCostTable(project)] : [])]).map((sheet, i, all) => ({ tab: all.length > 1 ? `Schedules ${i + 1}` : "Schedules", sheet })),
   ];
 }
