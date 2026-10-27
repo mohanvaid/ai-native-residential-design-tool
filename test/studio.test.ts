@@ -31,6 +31,8 @@ describe("studio", () => {
     const page = await (await fetch(`${base}/`)).text();
     expect(page).toContain("Studio house · studio");
     expect(page).toContain("/api/move");
+    expect(page).not.toContain("__TITLE__");
+    expect(page).not.toContain("__SHARE__");
     const plan = (await (await fetch(`${base}/api/plan`)).json()) as ReturnType<typeof planState>;
     expect(plan.rooms.map((r) => r.id)).toEqual(["liv", "bed"]);
     // Sheet space: x grows east from the margin, y grows downward from the plot's north edge
@@ -53,6 +55,25 @@ describe("studio", () => {
     const undone = await post("/api/undo", {});
     expect(undone.body.ok).toBe(true);
     expect(design.store.current.rooms.find((r) => r.id === "bed")!.boundary[0]![0]).toBe(6000);
+  });
+
+  it("takes an edge drag as moving that wall, with the neighbour giving way", async () => {
+    const room = (id: string) => design.store.current.rooms.find((x) => x.id === id)!;
+    const east = (id: string) => Math.max(...room(id).boundary.map((p) => p[0]));
+    const west = (id: string) => Math.min(...room(id).boundary.map((p) => p[0]));
+    // Close the gap so the two rooms share a wall, then drag that wall into the bedroom
+    const closed = await post("/api/resize", { room: "liv", edge: "east", delta: 502 });
+    expect(closed.status).toBe(200);
+    expect(closed.body.message).toMatch(/east wall of Living 1'8" out/);
+    const r = await post("/api/resize", { room: "liv", edge: "east", delta: 300 });
+    expect(r.status).toBe(200);
+    expect(east("liv")).toBe(6300);
+    expect(west("bed")).toBe(6300);
+    await post("/api/undo", {});
+    await post("/api/undo", {});
+    expect(east("liv")).toBe(5500);
+    expect(west("bed")).toBe(6000);
+    expect((await post("/api/resize", { room: "liv", edge: "up", delta: 300 })).body.message).toContain("no up edge");
   });
 
   it("refuses a drag that would break the model, and says why", async () => {

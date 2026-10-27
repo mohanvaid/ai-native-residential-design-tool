@@ -1,6 +1,6 @@
 /**
  * The edit canvas: a small HTTP server that serves the plan, takes drags and
- * nudges as MoveRoom ops, and takes chat messages through the same agent, so
+ * nudges as MoveRoom and ResizeRoom ops, and takes chat messages through the same agent, so
  * dragging and asking share one history and one undo. Everything goes through
  * the engine: the canvas never writes geometry, it only proposes ops.
  *
@@ -12,11 +12,11 @@
  */
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { DesignAgent, type TurnResult } from "../agent/agent.js";
-import { revisionLabel } from "../agent/report.js";
+import { changeSummary, revisionLabel } from "../agent/report.js";
 import { validate } from "../engine.js";
 import { bbox, boundaryToRect } from "../model/geometry.js";
 import { MARGIN } from "../output/frame.js";
-import type { Finding, Project } from "../model/schema.js";
+import type { Finding, Project, Side } from "../model/schema.js";
 import { formatFtIn } from "../model/units.js";
 import { floorPlanSheet } from "../output/floorplan.js";
 import { sheetToPng } from "../output/raster.js";
@@ -73,6 +73,8 @@ export function planState(design: Design, levelId?: string): PlanState {
   const project = design.store.current;
   const level = project.levels.find((l) => l.id === levelId) ?? project.levels[0]!;
   const sheet = design.stamped(() => floorPlanSheet(project, level.id));
+  const onLevel = new Set([level.id, ...project.rooms.filter((r) => r.level === level.id).map((r) => r.id)]);
+  const elsewhere = new Set([...project.levels.filter((l) => l.id !== level.id).map((l) => l.id), ...project.rooms.filter((r) => r.level !== level.id).map((r) => r.id)]);
   return {
     level: level.id,
     svg: sheetToSvg(sheet, { fluid: true, id: "plan" }),
@@ -89,8 +91,10 @@ export function planState(design: Design, levelId?: string): PlanState {
         const plot = bbox(project.plot.boundary);
         return [{ id: r.id, name: r.name, x: rect.x0 - (plot.x0 - MARGIN), y: plot.y1 + MARGIN - rect.y1, width: rect.x1 - rect.x0, depth: rect.y1 - rect.y0 }];
       }),
+    // Only what concerns the level on screen, plus findings about the whole design
     findings: validate(project)
       .filter((f) => f.severity !== "info")
+      .filter((f) => !f.elements.length || f.elements.some((e) => onLevel.has(e)) || !f.elements.some((e) => elsewhere.has(e)))
       .slice(0, 40)
       .map((f) => ({ severity: f.severity, message: f.message, elements: f.elements })),
     canUndo: design.store.undoableVersions.length > 0,
@@ -115,6 +119,21 @@ export function createStudio(design: Design, opts: StudioOptions = {}): Server {
     return { ok: true, message: `${room.name} moved ${describe(snap(dx), snap(dy))}.` };
   };
 
+  // Dragging an edge moves that wall: the room grows or shrinks and the neighbour on the far side gives way
+  const resize = (roomId: string, edge: string, delta: number): { ok: boolean; message: string } => {
+    const room = design.store.current.rooms.find((r) => r.id === roomId);
+    if (!room) return { ok: false, message: `There is no room ${roomId}.` };
+    if (!["north", "south", "east", "west"].includes(edge)) return { ok: false, message: `There is no ${edge} edge.` };
+    const by = snap(delta);
+    const before = design.store.current;
+    const ops: OpInput[] = [{ op: "ResizeRoom", target: roomId, args: { edge: edge as Side, delta: by, strategy: "shrink_neighbour" }, reason: `Dragged the ${edge} wall of ${room.name} on the plan` }];
+    const r = design.commitAs(opts.as, ops, { label: `Moved the ${edge} wall of ${room.name}` });
+    if (r.status === "rejected") return { ok: false, message: r.error!.message };
+    if (r.status === "blocked") return { ok: false, message: ["Not moved:", ...r.findings.filter((f) => f.severity === "block").map((f) => f.message)].join(" ") };
+    save(design);
+    return { ok: true, message: `Moved the ${edge} wall of ${room.name} ${formatFtIn(Math.abs(by))} ${by > 0 ? "out" : "in"}. ${changeSummary(before, design.store.current, r.changes, r.findings)}` };
+  };
+
   return createServer((req, res) => {
     void handle(req, res).catch((e: unknown) => json(res, 400, { error: e instanceof Error ? e.message : String(e) }));
   });
@@ -124,7 +143,7 @@ export function createStudio(design: Design, opts: StudioOptions = {}): Server {
     const path = url.pathname;
 
     if (req.method === "GET" && (path === "/" || path === "/index.html")) {
-      const html = STUDIO_HTML.replace("__TITLE__", escXml(design.name)).replace("__SHARE__", share);
+      const html = STUDIO_HTML.replaceAll("__TITLE__", escXml(design.name)).replaceAll("__SHARE__", share);
       res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
       res.end(html);
       return;
@@ -162,6 +181,13 @@ export function createStudio(design: Design, opts: StudioOptions = {}): Server {
     if (req.method === "POST" && path === "/api/move") {
       const body = await readJson(req);
       const r = move(String(body.room ?? ""), Number(body.dx ?? 0), Number(body.dy ?? 0));
+      json(res, r.ok ? 200 : 409, { ...r, plan: planState(design, String(body.level ?? "")) });
+      return;
+    }
+
+    if (req.method === "POST" && path === "/api/resize") {
+      const body = await readJson(req);
+      const r = resize(String(body.room ?? ""), String(body.edge ?? ""), Number(body.delta ?? 0));
       json(res, r.ok ? 200 : 409, { ...r, plan: planState(design, String(body.level ?? "")) });
       return;
     }
