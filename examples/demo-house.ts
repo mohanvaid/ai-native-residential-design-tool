@@ -1,0 +1,102 @@
+/**
+ * A 30 × 40 ft east-facing plot on a 30 ft road in Chennai, built and then
+ * edited the way the chat would: each step is one transaction of typed ops.
+ * Writes plans and the model to ./out.
+ *
+ *   npm run demo
+ */
+import { mkdirSync, writeFileSync } from "node:fs";
+import { boqTable, changeSummary, compareProjects, comparisonTables, comparisonText, Design, FileRepository, ftIn, revisionLabel, buildScene, doorWindowTable, flooringTable, furnitureTable, openingSchedule, renderDrawingSetPdf, renderFloorPlanSvg, renderViewer3dHtml, renderViewerHtml, sceneToGlb, tablesToCsv, tableToCsv, type OpInput, type TransactionResult } from "../src/index.js";
+import { DEMO_GROUND_FLOOR, DEMO_ROAD, demoPlot } from "../src/templates/demo-house.js";
+
+const design = new Design("demo-house", "Demo house, 30×40 East", demoPlot());
+const store = design.store;
+
+function step(label: string, ops: OpInput[], opts: { acceptBlocking?: boolean } = {}): TransactionResult {
+  const before = design.store.current;
+  const r = design.store.commit(ops, { label, ...opts });
+  console.log(`\n> ${label}\n  ${r.status.toUpperCase()}${r.error ? `: ${r.error.message}` : ""}`);
+  if (r.status === "committed") console.log(`  ${changeSummary(before, r.project, r.changes, r.findings)}`);
+  for (const s of r.summary) console.log(`  · ${s}`);
+  for (const f of r.findings.filter((f) => f.severity !== "info")) console.log(`  [${f.severity}] ${f.message}`);
+  return r;
+}
+
+step("Plot is 30×40 ft, east-facing, 30 ft road", DEMO_ROAD);
+step("Start from a 1BHK ground-floor template", DEMO_GROUND_FLOOR);
+
+step("There is a coconut tree near the gate; keep it", [
+  { op: "AddTree", args: { id: "tr_coconut", species: "Coconut", x: 11000, y: 8200 } },
+]);
+
+step("Make the living room 2 ft deeper, take it from the dining", [
+  { op: "ResizeRoom", target: "rm_liv", args: { edge: "north", delta: ftIn(2), strategy: "shrink_neighbour" }, reason: "User asked: make the hall 2 ft deeper" },
+]);
+
+step("Push the living room 1 m towards the road (expected to be blocked by the front setback)", [
+  { op: "MoveRoom", target: "rm_liv", args: { dx: 1000 } },
+]);
+
+step("Add a first floor with a bedroom, toilet and lounge, and a stair up from the living room", [
+  { op: "AddLevel", args: { id: "lv_ff", name: "First" } },
+  { op: "AddStair", args: { id: "st_1", fromLevel: "lv_gf", x: 4920, y: 1360, up: "east", shape: "dog-leg", turn: "left" } },
+  { op: "AddRoom", args: { id: "rm_lng", name: "Lounge", type: "living", level: "lv_ff", x: 4800, y: 1200, width: 4200, depth: 3600 } },
+  { op: "AddOpening", args: { type: "window", room: "rm_lng", side: "east", width: 1500 } },
+  { op: "AddRoom", args: { id: "rm_bed2", name: "Bedroom 2", type: "bedroom", level: "lv_ff", x: 600, y: 1200, width: 4200, depth: 3600 } },
+  { op: "AddRoom", args: { id: "rm_tlt2", name: "Toilet 2", type: "toilet", level: "lv_ff", x: 600, y: 4800, width: 1800, depth: 1800 } },
+  { op: "AddOpening", args: { type: "window", room: "rm_bed2", side: "south", width: 1500 } },
+  { op: "AddOpening", args: { type: "door", room: "rm_bed2", side: "east", offset: 2400 } },
+  { op: "AddOpening", args: { type: "door", room: "rm_tlt2", side: "south", offset: 600, width: 750, swing: { hinge: "end", into: "host" } } },
+  { op: "AddOpening", args: { type: "ventilator", room: "rm_tlt2", side: "west" } },
+]);
+
+step("Furnish it", [
+  { op: "PlaceItem", args: { id: "it_bed", catalogue: "bed.queen", room: "rm_bed1", against: "west" } },
+  { op: "PlaceItem", args: { id: "it_ward", catalogue: "wardrobe.3door", room: "rm_bed1", against: "south", align: "end" } },
+  { op: "PlaceItem", args: { id: "it_sofa", catalogue: "sofa.3seat", room: "rm_liv" } },
+  { op: "PlaceItem", args: { id: "it_din", catalogue: "dining.4", room: "rm_din" } },
+  { op: "PlaceItem", args: { id: "it_wc", catalogue: "wc.ewc", room: "rm_tlt1", against: "north" } },
+  { op: "PlaceItem", args: { id: "it_fridge", catalogue: "fridge.double", room: "rm_kit", against: "north", align: "end" } },
+  { op: "PlaceItem", args: { id: "it_bed2", catalogue: "bed.double", room: "rm_bed2", against: "west" } },
+]);
+
+step("The family wants Vastu considered, as advice only", [{ op: "SetPreferences", args: { vastu: "prefer" } }]);
+
+step("Frame it: columns at every wall corner and junction", [{ op: "PlaceColumns", args: {} }]);
+
+const undone = store.undo();
+console.log(`\n> Undo the last change\n  ${undone?.summary.join("; ")}`);
+step("Redo it: put the columns back", store.versions.find((v) => v.label.startsWith("Frame it"))!.ops);
+
+design.tag("Sent to engineer");
+
+// Try an option on a branch, compare it with main, and save both
+design.createBranch("option-b");
+step("Option B: a study upstairs next to the toilet, and wooden flooring in the lounge", [
+  { op: "AddRoom", args: { id: "rm_study", name: "Study", type: "study", level: "lv_ff", x: 2400, y: 4800, width: 2400, depth: 1800 } },
+  { op: "AddOpening", args: { type: "window", room: "rm_study", side: "north", width: 1200 } },
+  { op: "AddOpening", args: { type: "door", room: "rm_study", side: "south", offset: 1500, width: 750 } },
+  { op: "SetFinish", args: { rooms: ["rm_lng"], catalogue: "tile.wood-laminate" } },
+]);
+const sent = design.resolve("Sent to engineer");
+const cmp = compareProjects(sent.project, design.store.current, { a: `main Rev ${revisionLabel(sent.version)}`, b: `option-b Rev ${revisionLabel(design.store.current.version)}` });
+console.log(`\n${comparisonText(cmp)}`);
+design.switchTo("main");
+mkdirSync("out", { recursive: true });
+writeFileSync("out/compare.csv", tablesToCsv(comparisonTables(cmp)));
+const saved = new FileRepository("out/designs").save(design);
+console.log(`Saved ${saved} with branches ${[...design.branches.keys()].join(", ")}.`);
+
+const p = store.current;
+for (const level of p.levels) writeFileSync(`out/plan-${level.id}.svg`, renderFloorPlanSvg(p, level.id));
+writeFileSync("out/model.json", JSON.stringify(p, null, 2));
+writeFileSync("out/plans.pdf", renderDrawingSetPdf(p));
+writeFileSync("out/viewer.html", renderViewerHtml(p));
+writeFileSync("out/3d.html", renderViewer3dHtml(p));
+writeFileSync("out/model.glb", sceneToGlb(buildScene(p)));
+for (const t of [doorWindowTable(p), flooringTable(p), furnitureTable(p), boqTable(p)]) writeFileSync(`out/${t.title.split(" (")[0]!.toLowerCase().replace(/[^a-z]+/g, "-")}.csv`, tableToCsv(t));
+console.log(`\nVersion ${p.version}. Door and window schedule:`);
+for (const row of openingSchedule(p)) console.log(`  ${row.mark.padEnd(4)}${row.type.padEnd(11)}${row.width} × ${row.height}, sill ${row.sill}  × ${row.count}`);
+console.log("\nRule findings:");
+for (const f of store.commit([]).findings.filter((f) => f.source !== "core")) console.log(`  [${f.severity}] ${f.message}`);
+console.log("\nWrote out/viewer.html and out/3d.html (open on a phone), out/plans.pdf, out/model.glb, schedule CSVs, out/compare.csv, out/designs/demo-house.json, out/plan-lv_gf.svg, out/plan-lv_ff.svg, out/model.json");
