@@ -19,7 +19,7 @@ import { marksById } from "./schedule.js";
 import { sheetToSvg, type Item, type Pt, type Sheet } from "./sheet.js";
 import { siteplanSheet } from "./siteplan.js";
 
-export { ADVISORY_STAMP } from "./frame.js";
+export { ADVISORY_STAMP, withStamp } from "./frame.js";
 
 const ROOM_FILL: Partial<Record<RoomType, string>> = {
   living: "#f6efe2",

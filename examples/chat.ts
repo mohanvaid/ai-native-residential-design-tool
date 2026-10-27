@@ -7,12 +7,15 @@
  *   ANTHROPIC_API_KEY=... npm run chat -- <id>       # reopen a saved design
  *
  * Commands: /help, /designs, /revs, /branches, /branch <name> [from],
- * /switch <name>, /tag <label>, /compare <ref> [ref], /revert <rev>, quit.
+ * /switch <name>, /tag <label>, /compare <ref> [ref], /revert <rev>,
+ * /member <id> <role> [licence], /me <id>, /comment [on id,id] <text>,
+ * /comments, /resolve <id>, /signoff [construction|approval|tender], quit.
  * A ref is a branch ("main"), a revision ("main@C", "@C") or a tag.
  */
 import { mkdirSync, writeFileSync } from "node:fs";
 import { createInterface } from "node:readline/promises";
 import { DesignAgent } from "../src/agent/agent.js";
+import type { Role } from "../src/index.js";
 import { boqTable, compareProjects, comparisonTables, comparisonText, FileRepository, renderDrawingSetPdf, renderFloorPlanSvg, renderViewer3dHtml, renderViewerHtml, revisionLabel, tablesToCsv, tableToCsv, type Design } from "../src/index.js";
 import { DEMO_GROUND_FLOOR, DEMO_ROAD, demoPlot } from "../src/templates/demo-house.js";
 
@@ -35,7 +38,14 @@ else {
 // The agent is given the whole design, so its version tool can list, tag, branch and compare
 let agent = new DesignAgent(design);
 
+/** Who is at the keyboard, once the design has members. */
+let me: string | undefined;
+
 function writePlans(): void {
+  design.stamped(() => writeSheets());
+}
+
+function writeSheets(): void {
   const p = design.store.current;
   mkdirSync("out", { recursive: true });
   for (const level of p.levels) writeFileSync(`out/plan-${level.id}.svg`, renderFloorPlanSvg(p, level.id));
@@ -88,6 +98,44 @@ function command(line: string): boolean {
       console.log("(Full comparison in out/compare.csv.)");
       return false;
     }
+    case "member": {
+      const [id, role, licence] = args;
+      if (!id || !role) throw new Error("Usage: /member <id> <owner|collaborator|reviewer> [licence]");
+      design.addMember({ id, name: id[0]!.toUpperCase() + id.slice(1), role: role as Role, ...(licence ? { licence } : {}) }, me);
+      me ??= id;
+      console.log(`${id} is a ${role} on this design${licence ? ` (licence ${licence})` : ""}.${me === id ? ` You are ${id}.` : ""}`);
+      return false;
+    }
+    case "me":
+      if (!args[0]) throw new Error("Usage: /me <member id>");
+      design.require(args[0], "read");
+      me = args[0];
+      console.log(`You are ${design.member(me)?.name ?? me}, ${design.member(me)?.role ?? "not a member"}.`);
+      return false;
+    case "comment": {
+      const on = args[0] === "on" ? (args[1] ?? "").split(",").filter(Boolean) : [];
+      const text = (on.length ? args.slice(2) : args).join(" ");
+      if (!text) throw new Error("Usage: /comment [on id,id] <text>");
+      const c = design.comment(me, text, on);
+      console.log(`${c.id}: noted${on.length ? ` on ${on.join(", ")}` : ""}.`);
+      return false;
+    }
+    case "comments": {
+      const open = design.openComments();
+      if (!open.length) console.log("No open comments.");
+      for (const c of open) console.log(`${c.id}  ${design.member(c.author)?.name ?? c.author}${c.elements.length ? ` on ${c.elements.join(", ")}` : ""}: ${c.text}`);
+      return false;
+    }
+    case "resolve":
+      if (!args[0]) throw new Error("Usage: /resolve <comment id>");
+      design.resolveComment(args[0], me);
+      console.log(`${args[0]} resolved.`);
+      return false;
+    case "signoff": {
+      const s = design.signOff(me ?? "", (args[0] as "construction" | "approval" | "tender") ?? "construction");
+      console.log(`${s.name} signed off ${s.branch} Rev ${revisionLabel(s.version)} for ${s.purpose}. It is frozen; the drawings now carry the declaration instead of the advisory stamp.`);
+      return true;
+    }
     case "revert": {
       const target = design.resolve(`@${args[0] ?? ""}`);
       design.store.revert(target.version);
@@ -95,7 +143,7 @@ function command(line: string): boolean {
       return true;
     }
     default:
-      console.log("Commands: /designs, /revs, /branches, /branch <name> [from], /switch <name>, /tag <label>, /compare <ref> [ref], /revert <rev>, quit.");
+      console.log("Commands: /designs, /revs, /branches, /branch <name> [from], /switch <name>, /tag <label>, /compare <ref> [ref], /revert <rev>, /member <id> <role> [licence], /me <id>, /comment [on id,id] <text>, /comments, /resolve <id>, /signoff [construction|approval|tender], quit.");
       return false;
   }
 }
@@ -112,6 +160,7 @@ for (;;) {
       if (command(text)) writePlans();
       continue;
     }
+    design.require(me, "edit");
     const turn = await agent.send(text);
     console.log(`\n${turn.reply}`);
     if (turn.outcome !== "unchanged") writePlans();

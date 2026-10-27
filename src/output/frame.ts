@@ -20,6 +20,21 @@ export const SMALL = 170;
 
 export const ADVISORY_STAMP = "ADVISORY · NOT FOR CONSTRUCTION OR APPROVAL";
 
+let stampText = ADVISORY_STAMP;
+
+/** The stamp every sheet drawn inside `fn` carries, for a signed-off revision. */
+export function withStamp<T>(stamp: string, fn: () => T): T {
+  const was = stampText;
+  stampText = stamp || ADVISORY_STAMP;
+  try {
+    return fn();
+  } finally {
+    stampText = was;
+  }
+}
+
+export const currentStamp = () => stampText;
+
 export interface Frame {
   items: Item[];
   plot: Rect;
@@ -133,10 +148,14 @@ export function titleBlock(items: Item[], W: number, H: number, project: Project
     text([sb[0] + 5000 + 300, sb[1] + 230], "m", SMALL - 20);
   }
 
-  // Advisory stamp
-  const stamp: Pt = [W - 600 - 4300, H - 1150];
-  items.push({ kind: "rect", x: stamp[0], y: stamp[1], w: 4300, h: 300, stroke: "#c0392b", sw: 20 });
-  text([stamp[0] + 2150, stamp[1] + 150], ADVISORY_STAMP, SMALL - 30, { bold: true, fill: "#c0392b" });
+  // Advisory stamp, or the professional's declaration on a signed-off revision
+  const label = currentStamp();
+  const signed = label !== ADVISORY_STAMP;
+  const w = Math.max(4300, label.length * 85);
+  const stamp: Pt = [W - 600 - w, H - 1150];
+  const colour = signed ? "#1f6b3a" : "#c0392b";
+  items.push({ kind: "rect", x: stamp[0], y: stamp[1], w, h: 300, stroke: colour, sw: 20 });
+  text([stamp[0] + w / 2, stamp[1] + 150], label, SMALL - 30, { bold: true, fill: colour });
 
   // Title block
   const full = `${project.name} · ${title} · ${opts.scaleText ?? "Scale 1:100"} · Rev ${revisionLabel(project.version)}`;

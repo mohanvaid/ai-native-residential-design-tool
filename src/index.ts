@@ -15,6 +15,7 @@ export * from "./engine.js";
 export * from "./store/design.js";
 export * from "./store/repository.js";
 export * from "./store/compare.js";
+export * from "./store/collaboration.js";
 export * from "./rules/types.js";
 export * from "./rules/registry.js";
 export * from "./rules/vastu.js";

@@ -10,7 +10,9 @@
  * revert, say) is stored as a full snapshot instead.
  */
 import { revisionLabel } from "../agent/report.js";
-import { ModelStore, type VersionEntry } from "../engine.js";
+import { ModelStore, validate, type VersionEntry } from "../engine.js";
+import { ADVISORY_STAMP, withStamp } from "../output/frame.js";
+import { can, liveComments, refusal, signOffBlockers, signOffStamp, type Action, type Comment, type Member, type SignOff } from "./collaboration.js";
 import { applyChangeSet, type ChangeSet } from "../ops/changes.js";
 import { Op } from "../ops/definitions.js";
 import { Project } from "../model/schema.js";
@@ -58,6 +60,9 @@ export interface StoredBranch {
 }
 
 export interface StoredDesign {
+  members?: Member[];
+  comments?: Comment[];
+  signoffs?: SignOff[];
   format: number;
   id: string;
   name: string;
@@ -98,6 +103,11 @@ function replay(prev: Project, e: StoredEntry): Project {
 export class Design {
   readonly branches = new Map<string, Branch>();
   current = "main";
+  /** Who is on the design. Empty means nobody is signed in and nothing is restricted. */
+  readonly members: Member[] = [];
+  readonly comments: Comment[] = [];
+  readonly signoffs: SignOff[] = [];
+  private commentSeq = 0;
 
   constructor(
     readonly id: string,
@@ -106,6 +116,80 @@ export class Design {
     readonly createdAt = new Date().toISOString(),
   ) {
     this.branches.set("main", { store: new ModelStore(project), tags: new Map() });
+  }
+
+  member(id: string): Member | undefined {
+    return this.members.find((m) => m.id === id);
+  }
+
+  addMember(m: Member, by?: string): Member {
+    if (this.members.length && !can(this.member(by ?? ""), "manage_members")) throw new Error(refusal(this.member(by ?? ""), "manage_members"));
+    if (this.member(m.id)) throw new Error(`${m.id} is already on this design.`);
+    this.members.push(m);
+    return m;
+  }
+
+  /** Throws unless the member may do this, with the reason in words. */
+  require(memberId: string | undefined, action: Action, context = ""): void {
+    if (!this.members.length) return; // single-user design
+    const m = this.member(memberId ?? "");
+    const ok = action === "edit" && this.current === "main" ? can(m, "edit") && can(m, "edit_main") : can(m, action);
+    if (!ok) throw new Error(refusal(m, action === "edit" && this.current === "main" && can(m, "edit") ? "edit_main" : action, context));
+  }
+
+  /** Commits on behalf of a member, checking their role and freezing signed-off revisions. */
+  commitAs(memberId: string | undefined, ops: Parameters<ModelStore["commit"]>[0], opts: Parameters<ModelStore["commit"]>[1] = {}) {
+    this.require(memberId, "edit");
+    if (this.signOffOf(this.current, this.store.current.version))
+      throw new Error(`${this.current} Rev ${revisionLabel(this.store.current.version)} is signed off and frozen. Start a branch to carry on from it.`);
+    return this.store.commit(ops, { ...opts, author: memberId ?? opts.author });
+  }
+
+  comment(author: string | undefined, text: string, elements: string[] = [], replyTo?: string): Comment {
+    this.require(author, "comment");
+    const c: Comment = { id: `c${++this.commentSeq}`, author: author ?? "claude", text, at: new Date().toISOString(), branch: this.current, version: this.store.current.version, elements, ...(replyTo ? { replyTo } : {}) };
+    this.comments.push(c);
+    return c;
+  }
+
+  resolveComment(id: string, by: string | undefined): Comment {
+    const c = this.comments.find((x) => x.id === id);
+    if (!c) throw new Error(`There is no comment ${id}.`);
+    this.require(by, "comment");
+    c.resolvedBy = by ?? "claude";
+    c.resolvedAt = new Date().toISOString();
+    return c;
+  }
+
+  /** Open comments on the current branch, pinned to things that still exist. */
+  openComments(branch = this.current): Comment[] {
+    const project = this.branch(branch).store.current;
+    return liveComments(project, this.comments.filter((c) => c.branch === branch && !c.resolvedBy));
+  }
+
+  signOffOf(branch: string, version: number): SignOff | undefined {
+    return this.signoffs.find((s) => s.branch === branch && s.version === version);
+  }
+
+  /** Signs off the current revision: it freezes, and its drawings carry the professional's stamp. */
+  signOff(memberId: string, purpose: SignOff["purpose"] = "construction", note?: string): SignOff {
+    const m = this.member(memberId);
+    if (!can(m, "sign_off")) throw new Error(refusal(m, "sign_off"));
+    const version = this.store.current.version;
+    if (this.signOffOf(this.current, version)) throw new Error(`${this.current} Rev ${revisionLabel(version)} is already signed off.`);
+    const blockers = signOffBlockers(validate(this.store.current));
+    if (blockers.length) throw new Error([`${this.current} Rev ${revisionLabel(version)} cannot be signed off; ${blockers.length} blocking findings:`, ...blockers.map((f) => `- ${f.message}`)].join("\n"));
+    const open = this.openComments().length;
+    const s: SignOff = { branch: this.current, version, by: m!.id, name: m!.name, licence: m!.licence!, at: new Date().toISOString(), purpose, ...(note ? { note } : open ? { note: `${open} comments still open` } : {}) };
+    this.signoffs.push(s);
+    this.tag(`Signed off for ${purpose}`, version);
+    return s;
+  }
+
+  /** Runs `fn` with the stamp this revision's drawings should carry. */
+  stamped<T>(fn: () => T, branch = this.current, version = this.branch(branch).store.current.version): T {
+    const s = this.signOffOf(branch, version);
+    return withStamp(s ? signOffStamp(s) : ADVISORY_STAMP, fn);
   }
 
   /** The store of the branch being worked on. */
@@ -186,7 +270,18 @@ export class Design {
       }
       branches[name] = { ...(b.from ? { from: b.from } : {}), tags: Object.fromEntries([...b.tags].map(([v, t]) => [String(v), t])), undoable: b.store.undoableVersions, history };
     }
-    return { format: DESIGN_FORMAT, id: this.id, name: this.name, createdAt: this.createdAt, updatedAt, current: this.current, branches };
+    return {
+      format: DESIGN_FORMAT,
+      id: this.id,
+      name: this.name,
+      createdAt: this.createdAt,
+      updatedAt,
+      current: this.current,
+      branches,
+      ...(this.members.length ? { members: this.members } : {}),
+      ...(this.comments.length ? { comments: this.comments } : {}),
+      ...(this.signoffs.length ? { signoffs: this.signoffs } : {}),
+    };
   }
 
   static fromJSON(data: StoredDesign): Design {
@@ -210,6 +305,10 @@ export class Design {
       design.branches.set(name, branch);
     }
     if (!data.branches.main) design!.branches.delete("main");
+    design!.members.push(...(data.members ?? []));
+    design!.comments.push(...(data.comments ?? []));
+    design!.signoffs.push(...(data.signoffs ?? []));
+    design!.commentSeq = design!.comments.reduce((n, c) => Math.max(n, Number(c.id.replace(/\D/g, "")) || 0), 0);
     design!.current = data.branches[data.current] ? data.current : names[0]!;
     return design!;
   }
