@@ -10,7 +10,8 @@
     "test": "vitest run",
     "demo": "tsx examples/demo-house.ts",
     "chat": "tsx examples/chat.ts",
-    "reference": "tsx examples/reference-project.ts"
+    "reference": "tsx examples/reference-project.ts",
+    "studio": "tsx examples/studio.ts"
   },
   "repository": {
     "type": "git",
