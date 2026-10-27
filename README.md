@@ -1,8 +1,10 @@
 # AI-Native Residential Design Tool
 
-A conversational design tool for independent houses (up to G+2) in Chennai and Tamil Nadu. Every chat request becomes a small list of typed edit operations on one parametric building model, and every drawing, schedule and check is regenerated from that model.
+A conversational design tool for independent houses and stilt + 3 apartment buildings in Chennai and Tamil Nadu. Every chat request becomes a small list of typed edit operations on one parametric building model, and every drawing, schedule and check is regenerated from that model.
 
-This repository holds the engine (the model, edit operations, validation, the Tamil Nadu rule pack and floor-plan output) the chat agent that drives it, and a shareable offline plan viewer. There is no editing web UI yet.
+This repository holds the engine (the model, edit operations, validation, the Tamil Nadu rule pack and the drawing, schedule and cost output), the chat agent that drives it, an edit canvas where dragging a room goes through the same operations as asking for it, and a shareable offline plan viewer.
+
+[docs/SPEC_COVERAGE.md](docs/SPEC_COVERAGE.md) maps each section of the product specification to the code that serves it, and says what is still open.
 
 ## Quick start
 
@@ -10,9 +12,22 @@ This repository holds the engine (the model, edit operations, validation, the Ta
 npm install
 npm test          # unit tests
 npm run demo      # builds a 30×40 ft east-facing house and writes plans to ./out
+npm run reference # rebuilds the reference project: stilt + 3 on 62'6" × 52', one flat per floor
+npm run studio    # the edit canvas at http://localhost:5173 — drag a room, or ask for the change
 ANTHROPIC_API_KEY=... npm run chat   # chat with that house in the terminal; saved to ./designs
 ANTHROPIC_API_KEY=... npm run chat -- demo-house-30x40-east   # reopen a saved design
 ```
+
+`npm run reference` is the specification's success test: the whole building as one
+script of typed operations, with every output written from it, including the DXF,
+the XLSX schedules, the electrical and plumbing layouts, the joinery details and
+the share preview image.
+
+`npm run studio` serves the plan with a hit area over each room. Drag one, or
+nudge it with the arrow buttons, and the move goes through the same ops, the same
+checks and the same undo as a sentence in the chat box beside it; a move the rules
+refuse comes back as the reason rather than as a moved room. Set
+`ANTHROPIC_API_KEY` to turn that chat box on.
 
 `npm run demo` prints each edit as a transaction (committed, blocked or rejected) with its findings, then writes:
 
@@ -54,10 +69,22 @@ ANTHROPIC_API_KEY=... npm run chat -- demo-house-30x40-east   # reopen a saved d
 | `src/output/drawingset.ts` | The drawing set in sheet order, for the PDF and the viewer tabs. |
 | `src/output/sheet.ts`, `src/output/pdf.ts` | A sheet is a display list, so one drawing renders to SVG and to a dependency-free vector PDF. |
 | `src/output/viewer.ts` | The shareable single-file HTML viewer. |
+| `src/model/core.ts` | Vertical cores: stair, lift, shaft and duct, spanning levels. Lift shafts are sized against IS 14665, and every core is checked for continuity through each level it passes. |
+| `src/model/flats.ts` | Flats: rooms carry a flat id, and the area statement gives carpet, built-up and saleable area per flat and for the common area, with the cost split per flat. |
+| `src/model/mep.ts` | MEP points: lights, switches, sockets, AC points, water inlets, drains and floor traps, placed automatically per room type or one by one. Circuits follow IS 732 (ten lighting points to a circuit), stacks follow NBC 2016 Part 9, and the checks catch a switch behind a door, a socket in the wet zone, an overloaded circuit, a drain with no stack and a design with no distribution board. |
+| `src/model/parking.ts` | Car bays: whether each car fits, whether it can be driven in from the gate straight or round one corner clear of columns, trees and the other cars, and whether there are as many bays as dwellings. |
+| `src/model/themes.ts` | Interior themes (classic white, warm contemporary, Chettinad earth): floor, wall and ceiling finishes per room type, applied with `ApplyTheme`. |
+| `src/core/deps.ts` | The dependency graph. Each output records what it reads; a change set says which outputs are dirty, and `OutputCache` regenerates only those. A rename redraws 8 of 32 outputs, a resize 20. |
+| `src/output/dxf.ts`, `src/output/xlsx.ts`, `src/output/raster.ts` | DXF for the draughtsman (layered, with ACI colours), XLSX for the schedules and the BOQ, and PNG for the share preview — all written without a dependency. |
+| `src/output/details.ts` | Joinery elevations at 1:25: kitchen counters and wall units, wardrobes, the TV unit and the utility cupboard, with their dado and loft heights. |
+| `src/output/overlay.ts` | Compare as a drawing: added rooms green, removed red, moved or resized amber over a dashed outline of the old position. |
+| `src/store/collaboration.ts` | Roles (owner, collaborator, reviewer), comments pinned to an element, and sign-off: a registered professional's name, licence and revision replace the advisory stamp with their declaration, and freeze that revision. |
+| `src/studio/` | The edit canvas: an HTTP server that serves the plan, takes drags and nudges as ops, and shares one history with the chat box; plus a read-only share link with a preview image. |
+| `src/templates/reference-project.ts` | The reference project as one script of typed ops: stilt + 3 on 62'6" × 52' with the road to the north. |
 
 ### Edit operations
 
-`SetPlot`, `SetRoad`, `AddLevel`, `RemoveLevel`, `SetLevelHeight`, `AddRoom`, `RemoveRoom`, `ResizeRoom` (by distance or to a target area), `MoveRoom`, `RenameRoom`, `SetRoomType`, `AddOpening`, `MoveOpening`, `ResizeOpening`, `RemoveOpening`, `AddTree`, `UpdateTree`, `RemoveTree`, `AddColumn`, `MoveColumn`, `RemoveColumn`, `PlaceColumns` (a column at every wall corner and junction, splitting runs longer than the span limit), `AddStair` (sized to fit when no well size is given), `UpdateStair`, `RemoveStair`, `PlaceItem` (finds a spot when no wall is given), `MoveItem`, `SwapItem`, `RemoveItem`, `SetPreferences` (Vastu, span limit, budget, family size, colour theme; a budget turns on an over-budget warning), `SetFinish` (floor tiles per room), `SetRate` (a project's own rate for a BOQ line, e.g. a contractor's quote).
+`SetPlot`, `SetRoad`, `AddLevel`, `RemoveLevel`, `SetLevelHeight`, `AddRoom`, `RemoveRoom`, `ResizeRoom` (by distance or to a target area), `MoveRoom`, `RenameRoom`, `SetRoomType`, `AddOpening`, `MoveOpening`, `ResizeOpening`, `RemoveOpening`, `AddTree`, `UpdateTree`, `RemoveTree`, `AddColumn`, `MoveColumn`, `RemoveColumn`, `PlaceColumns` (a column at every wall corner and junction, splitting runs longer than the span limit), `AddStair` (sized to fit when no well size is given), `UpdateStair`, `RemoveStair`, `PlaceItem` (finds a spot when no wall is given), `MoveItem`, `SwapItem`, `RemoveItem`, `SetPreferences` (Vastu, span limit, budget, family size, colour theme; a budget turns on an over-budget warning), `SetFinish` (floor, wall or ceiling finish per room), `SetRate` (a project's own rate for a BOQ line, e.g. a contractor's quote), `AddCore`, `UpdateCore`, `RemoveCore` (stair, lift, shaft, duct), `AssignFlat`, `SetSetback` (an owner's own setback beside the rule's), `SetCompoundWall`, `MergeRooms`, `SplitRoom`, `AlignElements`, `ApplyTheme`, `AddMepPoint`, `MoveMepPoint`, `RemoveMepPoint`, `AutoPlaceMep`, `SetRuleProfile`.
 
 Every op shares one shape, `{ op, target?, args, reason? }`. A request is one transaction: all ops apply or none do. Each transaction returns a change set (what changed, used for "what did the AI change?") and undo replays it backwards.
 
@@ -74,9 +101,13 @@ Values were transcribed from the extracted Gazette text, and each cell cites its
 ## Current limits
 
 - Rooms are axis-aligned rectangles, and plots are rectangles.
+- Walls are derived from room boundaries rather than drawn: there is no wall entity to add or remove, no finish per wall face and no separate plumbing-wall type.
 - Room boundaries are wall centrelines; plans label the clear size inside the walls.
 - Plinth height is not modelled, so building height is the sum of floor-to-floor heights.
 - Columns are checked for alignment, spans and support only; member sizes, beams and foundations are for the structural engineer.
-- Stair headroom is not checked yet, and lifts and shafts are not modelled.
-- Elevations show external walls and openings; balconies, railings, staircase towers and roof details are not modelled yet.
-- MEP layouts are a later slice. The cost estimate is a planning figure (about ±15%) from assumed sections and allowances, not a tender BOQ; footing sizes, steel and electrical points are rules of thumb until the engineer's drawings exist.
+- Vertical circulation is checked for rise, tread, riser consistency, headroom and core continuity; fire and egress checks beyond that are not done.
+- Rule numbers are data in a versioned pack, but the checks that read them are code, so a new authority needs a new pack module rather than only a new table.
+- The catalogue is generic Indian sizes; brand and SKU catalogues are a partner phase.
+- Designs are JSON files and the studio is a local server: there is no database, no accounts and no signed share links yet.
+- The cost estimate is a planning figure (about ±15%) from assumed sections and allowances, not a tender BOQ; footing sizes, steel and point counts are rules of thumb until the engineer's drawings exist.
+- Every output is advisory until a registered professional signs off the revision in the tool.
