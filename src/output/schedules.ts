@@ -94,6 +94,19 @@ export function flooringTable(project: Project): Table {
   };
 }
 
+/** Floor, wall and ceiling finish per room, with the defaults where none was chosen. */
+export function finishesTable(project: Project): Table {
+  const name = (id: string | undefined, fallback: string) => (id ? (catalogueItem(id)?.name ?? id) : fallback);
+  const rows: string[][] = [];
+  for (const level of project.levels)
+    for (const room of project.rooms.filter((r) => r.level === level.id)) {
+      if (room.type === "parking") continue;
+      const wet = room.type === "toilet";
+      rows.push([level.name, room.name, name(room.finishes.floor, catalogueItem(defaultFloorFinish(room.type))!.name), name(room.finishes.wall, wet ? "Glazed wall tile to 2.1 m, emulsion above" : "Interior emulsion"), name(room.finishes.ceiling, "Ceiling, white emulsion")]);
+    }
+  return { title: `Finishes schedule${project.prefs.interiorTheme ? ` (theme: ${project.prefs.interiorTheme})` : ""}`, head: ["Floor", "Room", "Floor finish", "Walls", "Ceiling"], numeric: [], rows };
+}
+
 export function furnitureTable(project: Project): Table {
   return {
     title: "Furniture and fixtures",

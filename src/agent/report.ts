@@ -46,7 +46,9 @@ export function changeSummary(before: Project, after: Project, changes: ChangeSe
       if (a !== b) parts.push(`${now.name} now ${b} (was ${a})`);
       else if (JSON.stringify(was.boundary) !== JSON.stringify(now.boundary)) parts.push(`${now.name} moved`);
       else if (was.type !== now.type) parts.push(`${now.name} is now a ${now.type}`);
-      else if (was.finishes.floor !== now.finishes.floor) parts.push(`${now.name} floor now ${catalogueItem(now.finishes.floor ?? "")?.name.toLowerCase() ?? "default"}`);
+      else
+        for (const surface of ["floor", "wall", "ceiling"] as const)
+          if (was.finishes[surface] !== now.finishes[surface]) parts.push(`${now.name} ${surface === "wall" ? "walls" : surface} now ${catalogueItem(now.finishes[surface] ?? "")?.name.toLowerCase() ?? "default"}`);
     }
   }
   for (const c of changes) {

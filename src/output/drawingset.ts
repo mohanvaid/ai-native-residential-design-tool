@@ -4,7 +4,7 @@ import type { Project } from "../model/schema.js";
 import { elevationSheets, sectionSheet } from "./elevation.js";
 import { floorPlanSheet, type FloorPlanOptions } from "./floorplan.js";
 import { sheetsToPdf, type Paper } from "./pdf.js";
-import { areaStatementTable, doorWindowTable, flooringTable, furnitureTable, scheduleSheets } from "./schedules.js";
+import { areaStatementTable, doorWindowTable, finishesTable, flooringTable, furnitureTable, scheduleSheets } from "./schedules.js";
 import type { Sheet } from "./sheet.js";
 import { siteplanSheet } from "./siteplan.js";
 
@@ -21,7 +21,7 @@ export function drawingSet(project: Project, opts: FloorPlanOptions = {}): Drawi
     ...project.levels.map((l) => ({ tab: l.name, sheet: floorPlanSheet(project, l.id, opts) })),
     ...elevations,
     { tab: "Section", sheet: sectionSheet(project) },
-    ...scheduleSheets(project, [areaStatementTable(project), doorWindowTable(project), flooringTable(project), furnitureTable(project), boqTable(project), ...(project.rooms.some((r) => r.flat) ? [flatCostTable(project)] : [])]).map((sheet, i, all) => ({ tab: all.length > 1 ? `Schedules ${i + 1}` : "Schedules", sheet })),
+    ...scheduleSheets(project, [areaStatementTable(project), doorWindowTable(project), flooringTable(project), finishesTable(project), furnitureTable(project), boqTable(project), ...(project.rooms.some((r) => r.flat) ? [flatCostTable(project)] : [])]).map((sheet, i, all) => ({ tab: all.length > 1 ? `Schedules ${i + 1}` : "Schedules", sheet })),
   ];
 }
 

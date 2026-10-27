@@ -350,15 +350,26 @@ export function computeBoq(project: Project): Boq {
     }
   }
 
-  // Theme paint, extra over standard emulsion
-  if (project.prefs.interiorTheme) {
-    const painted = project.rooms.filter((r) => r.finishes.wall?.startsWith("paint."));
-    for (const room of painted) {
-      const lv = project.levels.find((l) => l.id === room.level);
-      if (!lv) continue;
-      const c = clearRect(deriveWalls(project, room.level), room);
-      t.add("PT-03", 2 * (m(rectWidth(c)) + m(rectDepth(c))) * m(lv.floorToFloor - lv.slabThickness), [room.id]);
+  // Chosen wall and ceiling finishes, priced extra over the standard emulsion and wall tile already counted
+  const PAINT_BASE = rateFor("PT-01")!.rate;
+  const DADO_BASE = rateFor("FL-03")!.rate;
+  for (const room of project.rooms) {
+    const lv = project.levels.find((l) => l.id === room.level);
+    const wall = room.finishes.wall ? catalogueItem(room.finishes.wall) : undefined;
+    const ceiling = room.finishes.ceiling ? catalogueItem(room.finishes.ceiling) : undefined;
+    if (!lv || (!wall && !ceiling) || !boundaryToRect(room.boundary)) continue;
+    const c = clearRect(deriveWalls(project, room.level), room);
+    const perimeter = 2 * (m(rectWidth(c)) + m(rectDepth(c)));
+    if (wall?.category === "paint" && mid(wall.priceInr) > PAINT_BASE)
+      t.addProduct(wall.id, "Painting", `${wall.name}, extra over standard emulsion`, "m²", mid(wall.priceInr) - PAINT_BASE, perimeter * m(lv.floorToFloor - lv.slabThickness), [room.id]);
+    if (wall?.category === "wall-tile") {
+      // Toilets already carry a standard dado to 2.1 m; elsewhere it is a 600 mm splash band over the counter
+      const dadoed = room.type === "toilet";
+      const rate = dadoed ? mid(wall.priceInr) - DADO_BASE : mid(wall.priceInr);
+      if (rate > 0) t.addProduct(wall.id, "Flooring", `${wall.name}${dadoed ? ", extra over standard wall tile" : ", splash band"}`, "m²", rate, perimeter * m(dadoed ? TOILET_DADO_MM : 600), [room.id]);
     }
+    if (ceiling && ceiling.id !== "ceiling.paint-white@1")
+      t.addProduct(ceiling.id, "Ceilings", ceiling.name, "m²", mid(ceiling.priceInr), m(rectWidth(c)) * m(rectDepth(c)), [room.id]);
   }
 
   // Services

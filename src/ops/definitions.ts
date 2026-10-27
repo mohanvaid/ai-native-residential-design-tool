@@ -307,8 +307,8 @@ export const SetFinish = z.object({
   op: z.literal("SetFinish"),
   args: z.object({
     rooms: z.array(z.string()).min(1).describe("Room ids to finish."),
-    surface: z.literal("floor").default("floor"),
-    catalogue: z.string().describe("A tile.* catalogue id."),
+    surface: z.enum(["floor", "wall", "ceiling"]).default("floor"),
+    catalogue: z.string().nullable().describe("floor: tile.*; wall: paint.* or walltile.*; ceiling: ceiling.*. null goes back to the default."),
   }),
   reason,
 });
@@ -400,6 +400,49 @@ export const SetCompoundWall = z.object({
   reason,
 });
 
+export const ApplyTheme = z.object({
+  op: z.literal("ApplyTheme"),
+  args: z.object({
+    theme: z.string().describe("Interior theme id: classic-white, warm-contemporary or chettinad-earth."),
+    rooms: z.array(z.string()).optional().describe("Only these rooms; default every room."),
+  }),
+  reason,
+});
+
+export const MergeRooms = z.object({
+  op: z.literal("MergeRooms"),
+  args: z.object({
+    rooms: z.array(z.string()).min(2).describe("Rooms on one level that together make a rectangle; the first keeps its id."),
+    name: z.string().optional(),
+    type: RoomType.optional(),
+  }),
+  reason,
+});
+
+export const SplitRoom = z.object({
+  op: z.literal("SplitRoom"),
+  target: z.string(),
+  args: z.object({
+    direction: z.enum(["east-west", "north-south"]).describe("east-west: a new wall running north-south splits it into a west and an east part; north-south: a wall running east-west splits it into south and north parts."),
+    at: mm.positive().describe("Distance of the new wall's centreline from the room's west (east-west) or south (north-south) wall."),
+    id: z.string().optional().describe("Id for the new (east or north) part."),
+    name: z.string().optional(),
+    type: RoomType.optional(),
+    door: z.boolean().default(true).describe("Put a door in the new wall."),
+  }),
+  reason,
+});
+
+export const AlignElements = z.object({
+  op: z.literal("AlignElements"),
+  args: z.object({
+    targets: z.array(z.string()).min(1).describe("Room or item ids to move."),
+    to: z.string().describe("Room or item id to line up with."),
+    edge: z.enum(["west", "east", "south", "north", "centre-x", "centre-y"]).describe("Which edge (or centre line) to line up."),
+  }),
+  reason,
+});
+
 export const Op = z.discriminatedUnion("op", [
   SetPlot,
   SetRoad,
@@ -439,6 +482,10 @@ export const Op = z.discriminatedUnion("op", [
   AssignFlat,
   SetSetback,
   SetCompoundWall,
+  ApplyTheme,
+  MergeRooms,
+  SplitRoom,
+  AlignElements,
 ]);
 export type Op = z.infer<typeof Op>;
 /** An op as the compiler emits it, before defaults are filled in. */
@@ -486,7 +533,7 @@ const DESCRIPTIONS: Record<OpName, string> = {
   SwapItem: "Replace a placed item with another catalogue entry (e.g. queen bed to king) in the same place.",
   RemoveItem: "Remove a placed item.",
   SetPreferences: "Turn Vastu checks on or off, or set the beam span limit, budget, family size or exterior colour theme.",
-  SetFinish: "Choose the floor tile for one or more rooms.",
+  SetFinish: "Choose the floor tile, wall paint or wall tile, or ceiling for one or more rooms.",
   SetRate: "Override a cost rate for this project, e.g. a contractor's quote for brickwork; null restores the table rate.",
   AddCore: "Add a lift, service shaft or duct through a range of levels.",
   UpdateCore: "Move, resize or extend a lift, shaft or duct.",
@@ -494,4 +541,8 @@ const DESCRIPTIONS: Record<OpName, string> = {
   AssignFlat: "Assign rooms to a flat (dwelling unit) for the area statement and per-flat cost, or mark them as common area.",
   SetSetback: "Set an owner's setback on one plot side on top of the rule setbacks, e.g. a 12 ft access passage.",
   SetCompoundWall: "Set which plot sides have a compound wall, and its height.",
+  ApplyTheme: "Apply an interior theme: floor, wall and ceiling finishes for every room (or the rooms given).",
+  MergeRooms: "Merge rooms that together make a rectangle into one, removing the walls between them.",
+  SplitRoom: "Split a room in two with a new wall, optionally with a door in it.",
+  AlignElements: "Move rooms or items so an edge or centre line lines up with another room or item.",
 };

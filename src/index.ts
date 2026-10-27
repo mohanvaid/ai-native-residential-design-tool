@@ -22,6 +22,7 @@ export * from "./model/wetstack.js";
 export * from "./model/zones.js";
 export * from "./model/core.js";
 export * from "./model/flats.js";
+export * from "./model/themes.js";
 export { tncdbr2019, buildingHeightMm, fsiArea } from "./rules/packs/tncdbr-2019.js";
 export { TNCDBR_2019 } from "./rules/packs/tncdbr-2019.tables.js";
 export * from "./output/floorplan.js";

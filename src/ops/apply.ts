@@ -12,9 +12,10 @@ import {
   translateRect,
   type Rect,
 } from "../model/geometry.js";
-import { catalogueItem, type CatalogueItem } from "../catalogue/catalogue.js";
+import { catalogueItem, FINISH_CATEGORIES, type Category, type CatalogueItem } from "../catalogue/catalogue.js";
 import { rateFor } from "../cost/rates.js";
-import { placeItem } from "../model/furnishing.js";
+import { itemRect, placeItem } from "../model/furnishing.js";
+import { INTERIOR_THEMES, interiorTheme, themeFinishes } from "../model/themes.js";
 import { Column, Core, Level, Opening, PlacedItem, Room, Stair, Tree, type OpeningType, type Side } from "../model/schema.js";
 import { DEFAULT_MAX_RISER_MM, levelIndex, proposeColumns, stairWellRect, stairWellSize, TREE_DEFAULTS, TREE_FALLBACK } from "../model/structure.js";
 import { deriveWalls, roomRect } from "../model/walls.js";
@@ -169,9 +170,7 @@ export function applyOp(draft: Draft, op: Op, opIndex: number): void {
     }
 
     case "MoveRoom": {
-      const room = draft.requireRoom(op.target);
-      draft.putRoom({ ...room, boundary: rectToBoundary(translateRect(roomRect(room), op.args.dx, op.args.dy)) });
-      for (const it of draft.project.items.filter((it) => it.room === room.id)) draft.put("item", { ...it, at: [it.at[0] + op.args.dx, it.at[1] + op.args.dy] });
+      moveRoomBy(draft, draft.requireRoom(op.target), op.args.dx, op.args.dy);
       return;
     }
 
@@ -404,11 +403,118 @@ export function applyOp(draft: Draft, op: Op, opIndex: number): void {
 
     case "SetFinish": {
       const a = op.args;
-      const cat = catalogueItem(a.catalogue);
-      if (!cat || cat.category !== "tile") throw new OpError(`"${a.catalogue}" is not a floor finish in the catalogue.`, "catalogue.missing");
+      const cat = a.catalogue === null ? null : catalogueItem(a.catalogue);
+      if (cat === undefined || (cat && !FINISH_FOR[a.surface].includes(cat.category)))
+        throw new OpError(`"${a.catalogue}" is not a ${a.surface} finish in the catalogue.`, "catalogue.missing");
       for (const id of a.rooms) {
         const room = draft.requireRoom(id);
-        draft.putRoom({ ...room, finishes: { ...room.finishes, floor: cat.id } });
+        const finishes = { ...room.finishes };
+        if (cat) finishes[a.surface] = cat.id;
+        else delete finishes[a.surface];
+        draft.putRoom({ ...room, finishes });
+      }
+      return;
+    }
+
+    case "ApplyTheme": {
+      const theme = interiorTheme(op.args.theme);
+      if (!theme) throw new OpError(`There is no interior theme "${op.args.theme}"; try ${INTERIOR_THEMES.map((t) => t.id).join(", ")}.`, "theme.missing");
+      const rooms = op.args.rooms ? op.args.rooms.map((id) => draft.requireRoom(id)) : draft.project.rooms;
+      for (const room of rooms) {
+        const set = themeFinishes(theme, room.type);
+        const finishes = { ...room.finishes };
+        for (const surface of ["floor", "wall", "ceiling"] as const) if (set[surface]) finishes[surface] = set[surface]!;
+        draft.putRoom({ ...room, finishes });
+      }
+      if (!op.args.rooms) draft.setPrefs({ ...draft.project.prefs, interiorTheme: theme.id });
+      return;
+    }
+
+    case "MergeRooms": {
+      const rooms = [...new Set(op.args.rooms)].map((id) => draft.requireRoom(id));
+      const keep = rooms[0]!;
+      if (rooms.some((r) => r.level !== keep.level)) throw new OpError("Rooms on different levels cannot be merged.", "merge.levels");
+      const rects = rooms.map(roomRect);
+      const box = { x0: Math.min(...rects.map((r) => r.x0)), y0: Math.min(...rects.map((r) => r.y0)), x1: Math.max(...rects.map((r) => r.x1)), y1: Math.max(...rects.map((r) => r.y1)) };
+      const sum = rects.reduce((t, r) => t + rectWidth(r) * rectDepth(r), 0);
+      if (Math.abs(sum - rectWidth(box) * rectDepth(box)) > 1 || rects.some((a, i) => rects.some((b, j) => j > i && a.x0 < b.x1 && b.x0 < a.x1 && a.y0 < b.y1 && b.y0 < a.y1)))
+        throw new OpError(`${rooms.map((r) => r.name).join(" and ")} do not make a rectangle together, so they cannot become one room.`, "merge.not_rectangle");
+      const ids = new Set(rooms.map((r) => r.id));
+      for (const o of draft.project.openings.filter((o) => ids.has(o.host.room))) {
+        const from = roomRect(draft.requireRoom(o.host.room));
+        const line = sideSegment(from, o.host.side).at;
+        const onBoundary = isHorizontal(o.host.side) ? line === box.y0 || line === box.y1 : line === box.x0 || line === box.x1;
+        // Openings between the merged rooms go with the walls they were in
+        if (!onBoundary) draft.removeOpening(o.id);
+        else draft.putOpening({ ...o, host: { ...o.host, room: keep.id }, offset: alongStart(from, o.host.side) + o.offset - alongStart(box, o.host.side) });
+      }
+      for (const it of draft.project.items.filter((it) => ids.has(it.room))) draft.put("item", { ...it, room: keep.id });
+      for (const pt of draft.project.mep.filter((pt) => ids.has(pt.room))) draft.put("mep", { ...pt, room: keep.id });
+      for (const r of rooms.slice(1)) draft.removeRoom(r.id);
+      draft.putRoom({ ...keep, name: op.args.name ?? keep.name, type: op.args.type ?? keep.type, boundary: rectToBoundary(box) });
+      return;
+    }
+
+    case "SplitRoom": {
+      const a = op.args;
+      const room = draft.requireRoom(op.target);
+      const rect = roomRect(room);
+      const ew = a.direction === "east-west";
+      const span = ew ? rectWidth(rect) : rectDepth(rect);
+      if (a.at < MIN_ROOM_DIM_MM || span - a.at < MIN_ROOM_DIM_MM)
+        throw new OpError(`Splitting ${room.name} at ${a.at} mm leaves a part under ${MIN_ROOM_DIM_MM} mm across.`, "room.too_small");
+      const cut = (ew ? rect.x0 : rect.y0) + a.at;
+      const first: Rect = ew ? { ...rect, x1: cut } : { ...rect, y1: cut };
+      const second: Rect = ew ? { ...rect, x0: cut } : { ...rect, y0: cut };
+      const id = a.id ?? draft.nextId("rm");
+      if (draft.room(id)) throw new OpError(`Room id "${id}" already exists.`, "room.duplicate");
+      const other = Room.parse({ ...room, id, name: a.name ?? `${room.name} 2`, type: a.type ?? room.type, boundary: rectToBoundary(second), targets: {}, meta });
+      draft.putRoom({ ...room, boundary: rectToBoundary(first) });
+      draft.putRoom(other);
+      const farSide: Side = ew ? "east" : "north";
+      for (const o of draft.project.openings.filter((o) => o.host.room === room.id)) {
+        if (o.host.side === farSide) {
+          draft.putOpening({ ...o, host: { ...o.host, room: id } });
+          continue;
+        }
+        const along = ew ? !isHorizontal(o.host.side) : isHorizontal(o.host.side);
+        if (along) continue; // the near side stays with the first part
+        // Sides the new wall crosses: the opening goes with the part holding its centre, kept inside that part
+        const abs = alongStart(rect, o.host.side) + o.offset;
+        const inSecond = abs + o.width / 2 > cut;
+        const part = inSecond ? second : first;
+        const len = sideLength(part, o.host.side);
+        const offset = Math.min(Math.max(0, abs - alongStart(part, o.host.side)), Math.max(0, len - o.width));
+        draft.putOpening({ ...o, host: { ...o.host, room: inSecond ? id : room.id }, offset, width: Math.min(o.width, len) });
+      }
+      const inside = (p: readonly [number, number]) => (ew ? p[0] >= cut : p[1] >= cut);
+      for (const it of draft.project.items.filter((it) => it.room === room.id && inside(it.at))) draft.put("item", { ...it, room: id });
+      for (const pt of draft.project.mep.filter((pt) => pt.room === room.id && inside(pt.at))) draft.put("mep", { ...pt, room: id });
+      if (a.door) {
+        const len = sideLength(first, farSide);
+        const width = Math.min(room.type === "toilet" || other.type === "toilet" ? 750 : 900, len - 200);
+        if (width >= 600)
+          draft.putOpening(Opening.parse({ id: draft.nextId("op"), type: "door", host: { room: room.id, side: farSide }, offset: Math.round((len - width) / 2), ...OPENING_DEFAULTS.door, width, swing: { hinge: "start", into: "host" }, meta }));
+      }
+      return;
+    }
+
+    case "AlignElements": {
+      const { targets, to, edge } = op.args;
+      const ref = elementRect(draft, to);
+      const pick = (r: Rect) => ({ west: r.x0, east: r.x1, south: r.y0, north: r.y1, "centre-x": (r.x0 + r.x1) / 2, "centre-y": (r.y0 + r.y1) / 2 })[edge];
+      const xAxis = edge === "west" || edge === "east" || edge === "centre-x";
+      for (const id of targets) {
+        if (id === to) continue;
+        const d = Math.round(pick(ref) - pick(elementRect(draft, id)));
+        if (!d) continue;
+        const [dx, dy] = xAxis ? [d, 0] : [0, d];
+        const room = draft.room(id);
+        if (room) moveRoomBy(draft, room, dx, dy);
+        else {
+          const it = draft.project.items.find((i) => i.id === id)!;
+          draft.put("item", { ...it, at: [it.at[0] + dx, it.at[1] + dy] });
+        }
       }
       return;
     }
@@ -520,11 +626,33 @@ export function applyOp(draft: Draft, op: Op, opIndex: number): void {
   }
 }
 
+/** Catalogue categories each surface accepts. */
+const FINISH_FOR: Record<"floor" | "wall" | "ceiling", Category[]> = { floor: ["tile"], wall: ["paint", "wall-tile"], ceiling: ["ceiling", "paint"] };
+
+/** Where offsets along a side are measured from: its west end (north/south sides) or south end (east/west sides). */
+const alongStart = (r: Rect, side: Side) => (isHorizontal(side) ? r.x0 : r.y0);
+
+/** Moves a room with its items and electrical/plumbing points; openings keep their offsets. */
+function moveRoomBy(draft: Draft, room: Room, dx: number, dy: number): void {
+  draft.putRoom({ ...room, boundary: rectToBoundary(translateRect(roomRect(room), dx, dy)) });
+  for (const it of draft.project.items.filter((it) => it.room === room.id)) draft.put("item", { ...it, at: [it.at[0] + dx, it.at[1] + dy] });
+  for (const pt of draft.project.mep.filter((pt) => pt.room === room.id)) draft.put("mep", { ...pt, at: [pt.at[0] + dx, pt.at[1] + dy] });
+}
+
+/** A room's or placed item's footprint. */
+function elementRect(draft: Draft, id: string): Rect {
+  const room = draft.room(id);
+  if (room) return roomRect(room);
+  const it = draft.project.items.find((i) => i.id === id);
+  if (!it) throw new OpError(`There is no room or item "${id}".`, "element.missing");
+  return itemRect(it, catalogueItem(it.catalogue)!);
+}
+
 function requireCatalogue(id: string): CatalogueItem {
   const cat = catalogueItem(id);
   if (!cat) throw new OpError(`"${id}" is not in the catalogue.`, "catalogue.missing");
   if (cat.category === "door" || cat.category === "window") throw new OpError(`"${id}" is a ${cat.category}; add it with AddOpening.`, "catalogue.not_placeable");
-  if (cat.category === "tile") throw new OpError(`"${id}" is a floor finish; set it with SetFinish.`, "catalogue.not_placeable");
+  if (FINISH_CATEGORIES.has(cat.category)) throw new OpError(`"${id}" is a finish; set it with SetFinish.`, "catalogue.not_placeable");
   return cat;
 }
 

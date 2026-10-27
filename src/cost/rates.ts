@@ -61,7 +61,6 @@ export const RATES: readonly Rate[] = [
   { code: "PB-04", trade: "Plumbing", description: "Water supply point, CPVC concealed (from the plumbing layout)", unit: "point", rate: 2200, labour: 0.4 },
   { code: "PB-05", trade: "Plumbing", description: "Drainage point, floor trap or WC outlet, uPVC", unit: "point", rate: 2600, labour: 0.4 },
   { code: "PB-06", trade: "Plumbing", description: "Soil/waste stack, uPVC 110 mm with fittings, per storey", unit: "m", rate: 1400, labour: 0.35 },
-  { code: "PT-03", trade: "Painting", description: "Internal premium emulsion in a theme colour, extra over standard", unit: "m²", rate: 45, labour: 0.5 },
 ];
 
 const BY_CODE = new Map(RATES.map((r) => [r.code, r]));
